@@ -7,11 +7,12 @@
 //   transcript          final lines only, written to call_events for the dashboard panel
 //   status-update       "connected" / "ended" lines for the transcript panel
 //   end-of-call-report  dispatcher call ended without a booking -> next contractor / escalate
-import type { NextRequest } from "next/server";
+import { after, type NextRequest } from "next/server";
 import { tools } from "@/lib/tools";
 import type { ToolContext } from "@/lib/tools/types";
 import type { ToolName } from "@/lib/contract";
-import { callEvent } from "@/lib/db";
+import { callEvent, db, ticketEvent } from "@/lib/db";
+import { translateLine } from "@/lib/openai";
 import { findTenantByPhone, getTicketByCall } from "@/lib/tools/data";
 import { onDispatcherCallEnded } from "@/lib/tools/dispatch";
 
@@ -86,6 +87,28 @@ function describe(name: string, out: unknown): string {
     default:
       return short(out);
   }
+}
+
+async function subtitle(id: number, text: string) {
+  try {
+    const t = await translateLine(text);
+    if (t) await db().from("call_events").update({ lang: t.lang, translation: t.english }).eq("id", id);
+  } catch (e) {
+    console.error("translation failed", e);
+  }
+}
+
+/** Stores what the call cost (Vapi reports it in USD) on the ticket, for the dashboard's impact card. */
+async function recordCost(callId: string, agent: Agent, cost: number) {
+  if (!Number.isFinite(cost) || cost <= 0) return;
+  let ticketId: number | null = null;
+  if (agent === "tenant") ticketId = (await getTicketByCall("tenant_call_id", callId))?.id ?? null;
+  if (!ticketId) {
+    const { data } = await db().from("call_events").select("ticket_id").eq("call_id", callId).not("ticket_id", "is", null).limit(1);
+    ticketId = (data as { ticket_id: number }[] | null)?.[0]?.ticket_id ?? null;
+  }
+  if (!ticketId && agent === "dispatcher") ticketId = (await getTicketByCall("dispatcher_call_id", callId))?.id ?? null;
+  if (ticketId) await ticketEvent(ticketId, "cost", `${agent} ${cost.toFixed(4)}`);
 }
 
 async function handleAssistantRequest(msg: Json, call: VapiCall) {
@@ -189,7 +212,9 @@ export async function POST(req: NextRequest) {
       const text = String(msg.transcript ?? "").trim();
       if (final && text && call.id) {
         const role = msg.role === "user" ? "user" : "assistant";
-        await callEvent({ callId: call.id, agent, role, text });
+        const id = await callEvent({ callId: call.id, agent, role, text });
+        // Live subtitles: translate after the response is sent, so Vapi is never kept waiting.
+        if (id) after(() => subtitle(id, text));
       }
       return Response.json({});
     }
@@ -206,9 +231,12 @@ export async function POST(req: NextRequest) {
       return Response.json({});
     }
 
-    if (type === "end-of-call-report" && call.id && agent === "dispatcher") {
-      const t = await getTicketByCall("dispatcher_call_id", call.id);
-      if (t) await onDispatcherCallEnded(t, String(msg.endedReason ?? "call ended"));
+    if (type === "end-of-call-report" && call.id) {
+      await recordCost(call.id, agent, Number(msg.cost ?? (call as { cost?: number }).cost ?? NaN));
+      if (agent === "dispatcher") {
+        const t = await getTicketByCall("dispatcher_call_id", call.id);
+        if (t) await onDispatcherCallEnded(t, String(msg.endedReason ?? "call ended"));
+      }
       return Response.json({});
     }
   } catch (e) {

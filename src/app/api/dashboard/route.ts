@@ -16,13 +16,15 @@ export async function GET() {
         `id, unit_id, visit_unit_id, issue_type, urgency, status, summary, photo_path, photo_assessment, photo_safety_advice,
          pattern_flag, pattern_note, contractor_id, scheduled_at, call_started_at, booked_at, created_at, seed,
          tenant_call_id, dispatcher_call_id, dispatch_attempts, escalation_reason,
-         contractor:contractors(name, company, trade, rating),
+         contractor:contractors(name, company, trade, rating, language),
          tenant:tenants(name),
          events:ticket_events(id, kind, message, created_at)`,
       )
       .order("id", { ascending: false })
       .limit(30),
-    sb.from("call_events").select("id, call_id, agent, role, text, ticket_id, created_at").order("id", { ascending: false }).limit(200),
+    // Falls back to the pre-translation columns until supabase/migrations/001 has been run.
+    sb.from("call_events").select("id, call_id, agent, role, text, lang, translation, ticket_id, created_at").order("id", { ascending: false }).limit(200)
+      .then((r) => (r.error ? sb.from("call_events").select("id, call_id, agent, role, text, ticket_id, created_at").order("id", { ascending: false }).limit(200) : r)),
     sb.from("lease_rules").select("issue_type, responsible, note"),
     sb.from("contractor_slots").select("id, contractor_id, starts_at, ends_at, booked").order("starts_at"),
   ]);
@@ -34,7 +36,7 @@ export async function GET() {
   type TicketRow = Record<string, unknown> & {
     id: number; unit_id: number; visit_unit_id: number | null; contractor_id: number | null; photo_path: string | null;
     scheduled_at: string | null; events: { id: number; created_at: string }[];
-    contractor: { name: string; company: string | null; rating: number } | null;
+    contractor: { name: string; company: string | null; rating: number; language: string } | null;
     tenant: { name: string } | null;
   };
   const ticketRows = must(tickets, "tickets") as unknown as TicketRow[];
@@ -56,6 +58,7 @@ export async function GET() {
         contractor_name: t.contractor?.name ?? null,
         contractor_company: t.contractor?.company ?? null,
         contractor_rating: t.contractor?.rating ?? null,
+        contractor_language: t.contractor?.language ?? null,
         tenant_name: t.tenant?.name ?? null,
         tenant: undefined,
         contractor: undefined,
