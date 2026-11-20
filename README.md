@@ -12,16 +12,41 @@ cp .env.example .env.local   # fill in the keys (ask your teammate for the share
 npm run dev
 ```
 
-Database: in the Supabase SQL editor, run `supabase/schema.sql`, then `supabase/seed.sql`, then your own `supabase/phones.local.sql` (copy it from `phones.example.sql` and add real numbers; it is git-ignored).
+1. **Database.** In the Supabase SQL editor run `supabase/schema.sql`, then `supabase/seed.sql`, then your own `supabase/phones.local.sql` (copy it from `phones.example.sql`, add the real numbers exactly as they show up as caller ID; it is git-ignored).
+2. **Try the whole loop without phones.** With `npm run dev` running: `node scripts/simulate-demo.mjs` plays the six demo moments against the webhook (add `--no-answer` to see the fallback to the second plumber, `--fast` to skip pauses). Watch it on `http://localhost:3000/?key=<DASHBOARD_ADMIN_KEY>`.
+3. **Phones.** Deploy (or `ngrok http 3000`) and set `PUBLIC_BASE_URL`, then `node scripts/sync-agents.mjs`. It creates or updates both Vapi assistants from `agents/` and points the phone number at `/api/vapi`, so inbound calls are matched to the tenant by caller ID before the agent says hello. Put the printed assistant ids in `.env.local` and on Vercel.
+4. **Before every rehearsal:** press *Reset demo* on the dashboard (or `select reset_demo();`). It deletes call-created tickets and transcripts, re-dates the seed history and gives every contractor two fresh slots today. Phones are kept.
+
+Without Twilio or Vapi keys, SMS and the outbound call are logged instead of sent, so the rest of the loop still runs.
+
+## Demo safety nets
+
+- **Dispatch guard:** `dispatch_contractor` refuses (with a reason the agent says) unless the ticket is open, not an emergency, and a contractor has a free slot. Nobody's phone rings by accident.
+- **No answer:** if a dispatcher call ends without a booking, the next contractor by rating is called; after two calls the on-call manager is texted and the ticket escalates.
+- **Emergencies:** gas, fire, sparks or water on electrics get the safety script, an escalated ticket and an SMS to `ONCALL_MANAGER_PHONE`; never a normal dispatch.
+- **Backup button:** on the dashboard (`?key=`), *Backup: dispatch now* runs the same guarded dispatch if the agent stalls.
+- **`confirm_slot`** only books a free slot of the contractor that was called, atomically.
+- **Times** are always spoken and texted in `DEMO_TIME_ZONE`, never UTC.
 
 ## Layout
 
 | Path | What |
 |---|---|
 | `src/lib/contract.ts` | The 7 tools the voice agents call: names, inputs, outputs |
-| `src/lib/tools/` | Tool implementations (database, pattern rule, SMS, dispatch) |
+| `src/lib/tools/` | Tool implementations: `index.ts` (handlers), `data.ts` (queries, pattern sentence), `dispatch.ts` (guard, fallback, escalation) |
 | `src/lib/vapi.ts` | Starts the outbound dispatcher call |
-| `src/app/api/vapi/` | Webhook Vapi calls for every tool call |
-| `agents/` | Voice agent prompts and tool definitions |
-| `supabase/` | Schema and demo seed data |
+| `src/app/api/vapi/` | Webhook for both agents: caller-ID match, tool calls, live transcript, call-ended fallback |
+| `src/app/page.tsx` | Big-screen dashboard: timer, steps, building stack, ticket, live transcript |
+| `src/app/photo/` + `api/photo/` | Tenant photo page and vision assessment |
+| `src/app/api/demo/` | Reset and backup dispatch (need `DASHBOARD_ADMIN_KEY`) |
+| `agents/` | Voice agent prompts and tool definitions (pushed with `scripts/sync-agents.mjs`) |
+| `supabase/` | Schema (incl. pattern rule, slot booking and reset as SQL functions) and demo seed data |
+| `scripts/` | `sync-agents`, `simulate-demo`, `fake-tool-call` |
 | `docs/TRACKS.md` | How the work is split between two people |
+
+## Before the demo, check on a real call
+
+These Vapi details couldn't be verified without an account; the webhook already accepts the likely variants, but confirm them in the first test call:
+- the greeting uses the caller's name (variables from `assistant-request` reach `firstMessage`);
+- outbound calls reach Dutch/German numbers (Vapi's free numbers may be US-only; import a Twilio number if not);
+- `sync-agents.mjs` is accepted as-is (`endCall` tool type, Deepgram `nova-3` with `multi` language).

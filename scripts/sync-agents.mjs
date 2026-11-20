@@ -1,91 +1,51 @@
-#!/usr/bin/env node
-// Pushes the voice agents in agents/ to Vapi, and points the phone number at our webhook.
-// Agents are matched by name: created the first time, updated after that.
-//
-//   node scripts/sync-agents.mjs            create or update agents in Vapi
-//   node scripts/sync-agents.mjs --dry-run  print what would be sent, call nothing
-//
-// Needs in .env.local: VAPI_API_KEY, PUBLIC_BASE_URL, VAPI_CREDENTIAL_ID, VAPI_PHONE_NUMBER_ID.
-// Optional: VAPI_OPENAI_MODEL (default gpt-4.1-mini), ELEVENLABS_VOICE_ID (default "sarah").
-import { tenantAssistant } from "../agents/tenant/assistant.mjs";
+// Creates or updates both Vapi assistants from agents/, and points the phone number at the webhook.
+//   node scripts/sync-agents.mjs            create/update both assistants + phone number
+//   node scripts/sync-agents.mjs --no-phone leave the phone number alone
+// Prints the assistant ids to put in .env.local on first run.
+import { env } from "./env.mjs";
+import { buildAssistants } from "../agents/config.mjs";
 
-try {
-  process.loadEnvFile(".env.local");
-} catch {
-  // no .env.local
-}
-
-const dryRun = process.argv.includes("--dry-run");
-const env = process.env;
-const API = "https://api.vapi.ai";
-
-function need(name) {
-  const value = env[name];
-  if (!value) {
-    if (dryRun) return `<${name}>`;
-    console.error(`Missing ${name} in .env.local`);
-    process.exit(1);
-  }
-  return value;
+const need = ["VAPI_API_KEY", "PUBLIC_BASE_URL", "VAPI_WEBHOOK_SECRET", "ELEVENLABS_VOICE_ID"];
+const missing = need.filter((k) => !env[k]);
+if (missing.length) {
+  console.error("Missing in .env.local:", missing.join(", "));
+  process.exit(1);
 }
 
 async function vapi(method, path, body) {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetch(`https://api.vapi.ai${path}`, {
     method,
-    headers: { authorization: `Bearer ${env.VAPI_API_KEY}`, "content-type": "application/json" },
+    headers: { Authorization: `Bearer ${env.VAPI_API_KEY}`, "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}: ${text.slice(0, 500)}`);
-  return text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}\n${text}`);
+  return text ? JSON.parse(text) : {};
 }
 
-/** Creates the assistant, or updates the one with the same name. Returns its id. */
-async function upsertAssistant(config) {
-  const existing = (await vapi("GET", "/assistant?limit=100")).find((a) => a.name === config.name);
-  const saved = existing
-    ? await vapi("PATCH", `/assistant/${existing.id}`, config)
-    : await vapi("POST", "/assistant", config);
-
-  // Make sure the tool list really was replaced, not merged.
-  const want = config.model.tools.map((t) => t.function?.name ?? t.type).sort().join(",");
-  const got = (saved.model?.tools ?? []).map((t) => t.function?.name ?? t.type).sort().join(",");
-  if (want !== got) console.warn(`  ! tools in Vapi (${got}) differ from agents/ (${want})`);
-
-  console.log(`✓ ${existing ? "updated" : "created"} "${config.name}"  id ${saved.id}`);
-  return saved.id;
+const assistants = buildAssistants(env);
+const ids = {};
+for (const [key, idVar] of [["tenant", "VAPI_TENANT_ASSISTANT_ID"], ["dispatcher", "VAPI_DISPATCHER_ASSISTANT_ID"]]) {
+  const existing = env[idVar];
+  const a = existing
+    ? await vapi("PATCH", `/assistant/${existing}`, assistants[key])
+    : await vapi("POST", "/assistant", assistants[key]);
+  ids[idVar] = a.id;
+  console.log(`${existing ? "updated" : "created"} ${assistants[key].name}: ${a.id}`);
 }
 
-const server = {
-  url: `${need("PUBLIC_BASE_URL").replace(/\/$/, "")}/api/vapi`,
-  credentialId: need("VAPI_CREDENTIAL_ID"),
-};
-const tenant = tenantAssistant({
-  server,
-  model: env.VAPI_OPENAI_MODEL || "gpt-4.1-mini",
-  voiceId: env.ELEVENLABS_VOICE_ID || "sarah",
-});
-// The phone number has no fixed assistant: Vapi sends an assistant-request to our webhook,
-// which answers with the tenant assistant and the caller's details.
-const phoneNumberPatch = { assistantId: null, server };
-
-if (dryRun) {
-  console.log(JSON.stringify({ assistants: [tenant], phoneNumber: phoneNumberPatch }, null, 2));
-  process.exit(0);
+if (!process.argv.includes("--no-phone") && env.VAPI_PHONE_NUMBER_ID) {
+  // No fixed assistant on the number: Vapi sends assistant-request to the webhook, which
+  // matches the caller ID and starts the tenant agent with the name and unit already known.
+  await vapi("PATCH", `/phone-number/${env.VAPI_PHONE_NUMBER_ID}`, {
+    assistantId: null,
+    server: { url: assistants.tenant.server.url, headers: assistants.tenant.server.headers },
+  });
+  console.log("phone number now sends assistant-request to", assistants.tenant.server.url);
 }
 
-need("VAPI_API_KEY");
-const phoneNumberId = need("VAPI_PHONE_NUMBER_ID");
-const tenantId = await upsertAssistant(tenant);
-
-try {
-  await vapi("PATCH", `/phone-number/${phoneNumberId}`, phoneNumberPatch);
-  console.log(`✓ phone number now asks ${server.url} which assistant to use`);
-} catch (err) {
-  console.warn(`! could not update the phone number: ${err.message}`);
-  console.warn("  In the Vapi dashboard, open the number, clear its assistant, and set the server URL and credential.");
-}
-
-if (env.VAPI_TENANT_ASSISTANT_ID !== tenantId) {
-  console.log(`\nAdd this to .env.local and to the deploy's environment variables:\nVAPI_TENANT_ASSISTANT_ID=${tenantId}`);
+const newOnes = Object.entries(ids).filter(([k]) => !env[k]);
+if (newOnes.length) {
+  console.log("\nAdd to .env.local (and Vercel env):");
+  for (const [k, v] of newOnes) console.log(`${k}=${v}`);
 }
