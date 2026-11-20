@@ -8,9 +8,10 @@ interface Event { id: number; kind: string; message: string; created_at: string 
 interface Ticket {
   id: number; unit: string; stack: string; visit_first: string | null; issue_type: string; urgency: string; status: string;
   summary: string; pattern_flag: boolean; pattern_note: string | null; photo_url: string | null; photo_assessment: string | null;
-  photo_safety_advice: string | null; contractor_name: string | null; contractor_company: string | null; scheduled_label: string | null;
-  call_started_at: string | null; booked_at: string | null; created_at: string; seed: boolean; tenant_call_id: string | null;
-  dispatcher_call_id: string | null; dispatch_attempts: number; escalation_reason: string | null; events: Event[];
+  photo_safety_advice: string | null; contractor_name: string | null; contractor_company: string | null; contractor_rating: number | null;
+  tenant_name: string | null; scheduled_label: string | null; call_started_at: string | null; booked_at: string | null;
+  created_at: string; seed: boolean; tenant_call_id: string | null; dispatcher_call_id: string | null; dispatch_attempts: number;
+  escalation_reason: string | null; events: Event[];
 }
 interface CallEvent { id: number; call_id: string; agent: "tenant" | "dispatcher"; role: string; text: string; ticket_id: number | null; created_at: string }
 interface Unit { id: number; label: string; floor: number; stack: string }
@@ -21,30 +22,16 @@ interface State {
   lease_rules: { issue_type: string; responsible: string; note: string }[];
 }
 
-const STEPS = [
-  { key: "call", label: "Caller known" },
-  { key: "ticket", label: "Triaged" },
-  { key: "photo", label: "Photo checked" },
-  { key: "pattern", label: "History checked" },
-  { key: "dispatch", label: "Contractor called" },
-  { key: "booked", label: "Booked" },
-  { key: "sms", label: "Tenant texted" },
-] as const;
+/** The demo has to finish inside this many seconds (pitch plan). */
+const TARGET_SECONDS = 80;
 
-function fmtClock(ms: number) {
-  const s = Math.max(0, ms) / 1000;
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`;
-}
-function hhmm(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Europe/Amsterdam" });
-}
+// ---------------------------------------------------------------------------
+// Data
+// ---------------------------------------------------------------------------
 
-export default function DashboardView() {
+function useDashboard() {
   const [state, setState] = useState<State | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(0);
-  const [adminKey, setAdminKey] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -67,9 +54,7 @@ export default function DashboardView() {
   }, [load]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL
-    setAdminKey(params.get("key") ?? (params.has("admin") ? "" : null));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch
     load();
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -95,39 +80,75 @@ export default function DashboardView() {
       ticks++;
       if (!live || ticks % 10 === 0) load();
     }, 1500);
-    const clock = setInterval(() => setNow(Date.now()), 100);
     return () => {
       cleanup();
       clearInterval(poll);
-      clearInterval(clock);
     };
   }, [load, refresh]);
 
+  return { state, error, load };
+}
+
+function useNow(intervalMs = 100) {
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
+}
+
+/** Transcript lines that belong to one ticket: its tenant call and every dispatcher call for it. */
+function linesFor(t: Ticket | null, calls: CallEvent[], tenantCallId: string | null) {
+  const tenantId = t?.tenant_call_id ?? tenantCallId;
+  const tenant = tenantId ? calls.filter((c) => c.call_id === tenantId) : [];
+  const ids = new Set(calls.filter((c) => c.agent === "dispatcher" && t && c.ticket_id === t.id).map((c) => c.call_id));
+  if (t?.dispatcher_call_id) ids.add(t.dispatcher_call_id);
+  const dispatcher = calls.filter((c) => c.agent === "dispatcher" && ids.has(c.call_id));
+  return { tenant, dispatcher };
+}
+
+function isLive(lines: CallEvent[], now: number) {
+  const last = lines.at(-1);
+  if (!last || !now) return false;
+  if (last.role === "system" && last.text === "Call ended") return false;
+  return now - Date.parse(last.created_at) < 5 * 60e3;
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function DashboardView() {
+  const { state, error, load } = useDashboard();
+  const now = useNow();
+  const [adminKey, setAdminKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL
+    setAdminKey(params.get("key") ?? (params.has("admin") ? "" : null));
+  }, []);
+
   const view = useMemo(() => {
     if (!state) return null;
-    const live = state.tickets.filter((t) => !t.seed);
-    const ticket = live[0] ?? null;
-    // A tenant call newer than the current ticket = a call in progress before its ticket exists.
-    const tenantCalls = state.calls.filter((c) => c.agent === "tenant");
-    const lastTenantCall = tenantCalls.at(-1)?.call_id ?? null;
-    const activeTenantCall = ticket?.tenant_call_id ?? lastTenantCall;
-    const callInProgressWithoutTicket = lastTenantCall && lastTenantCall !== ticket?.tenant_call_id ? lastTenantCall : null;
-    const tenantCallId = callInProgressWithoutTicket ?? activeTenantCall;
-    const current = callInProgressWithoutTicket ? null : ticket;
-    const firstLine = state.calls.find((c) => c.call_id === tenantCallId);
-    const startedAt = current?.call_started_at ?? firstLine?.created_at ?? null;
-    const tenantLines = state.calls.filter((c) => c.call_id === tenantCallId);
-    // Every dispatcher call for this ticket (a missed first contractor, then the next one).
-    const dispatcherIds = new Set(
-      state.calls.filter((c) => c.agent === "dispatcher" && current && c.ticket_id === current.id).map((c) => c.call_id),
-    );
-    if (current?.dispatcher_call_id) dispatcherIds.add(current.dispatcher_call_id);
-    const dispatcherLines = state.calls.filter((c) => c.agent === "dispatcher" && dispatcherIds.has(c.call_id));
-    return { current, startedAt, tenantLines, dispatcherLines };
-  }, [state]);
+    const callTickets = state.tickets.filter((t) => !t.seed);
+    const latest = callTickets[0] ?? null;
+    // A tenant call newer than the latest ticket is a call in progress before its ticket exists.
+    const lastTenantCall = state.calls.filter((c) => c.agent === "tenant").at(-1)?.call_id ?? null;
+    const pendingCall = lastTenantCall && lastTenantCall !== latest?.tenant_call_id ? lastTenantCall : null;
+    const liveTicket = pendingCall ? null : latest;
+    const selected = selectedId ? state.tickets.find((t) => t.id === selectedId) ?? null : null;
+    const ticket = selected ?? liveTicket;
+    const lines = linesFor(ticket, state.calls, selected ? null : pendingCall ?? latest?.tenant_call_id ?? null);
+    const startedAt = ticket?.call_started_at ?? lines.tenant[0]?.created_at ?? null;
+    return { callTickets, ticket, lines, startedAt, viewingPast: Boolean(selected) };
+  }, [state, selectedId]);
 
   async function admin(path: string, body?: unknown) {
-    setBusy(path);
+    setBusy(true);
     try {
       const res = await fetch(path + (adminKey ? `?key=${encodeURIComponent(adminKey)}` : ""), {
         method: "POST",
@@ -138,203 +159,573 @@ export default function DashboardView() {
       if (!res.ok || json.started === false) alert(json.reason ?? json.error ?? `Failed (${res.status})`);
       await load();
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
   if (!state || !view) {
     return (
-      <div className="hm-shell hm-center">
+      <div className="ui-loading">
         <Logo />
-        <p className="hm-muted">{error ? `Can't reach the backend: ${error}` : "Connecting to the building…"}</p>
+        <p>{error ? `Can't reach the backend: ${error}` : "Connecting…"}</p>
       </div>
     );
   }
 
-  const { current, startedAt, tenantLines, dispatcherLines } = view;
-  const stopAt = current?.booked_at ? Date.parse(current.booked_at) : null;
-  const elapsed = startedAt ? (stopAt ?? now) - Date.parse(startedAt) : 0;
-  const timerRunning = Boolean(startedAt && !stopAt && elapsed < 15 * 60e3);
-  const done = stepState(current, tenantLines);
-  const nextStep = STEPS.findIndex((s) => !done[s.key]);
-  const rule = current ? state.lease_rules.find((r) => r.issue_type === current.issue_type) : null;
-  const history = state.tickets.filter((t) => t.seed);
-  const tenantLive = isLive(tenantLines, now);
-  const dispatcherLive = isLive(dispatcherLines, now);
-  const status = stopAt
-    ? { cls: "hm-status-done", text: "Loop closed" }
-    : tenantLive || dispatcherLive
-      ? { cls: "hm-status-live", text: dispatcherLive ? "On the phone with the contractor" : "Live call" }
-      : current?.status === "escalated"
-        ? { cls: "hm-status-alert", text: "Escalated" }
-        : { cls: "", text: "Waiting for a call" };
+  const { ticket, lines, startedAt, viewingPast, callTickets } = view;
+  const tenantLive = !viewingPast && isLive(lines.tenant, now);
+  const dispatcherLive = !viewingPast && isLive(lines.dispatcher, now);
+  const anyLive = tenantLive || dispatcherLive;
+  const stopAt = ticket?.booked_at ? Date.parse(ticket.booked_at) : null;
+  const running = Boolean(startedAt && !stopAt && !viewingPast && now && now - Date.parse(startedAt!) < 15 * 60e3);
+  const elapsed = startedAt ? (stopAt ?? (running ? now : Date.parse(startedAt))) - Date.parse(startedAt) : 0;
+  const status = statusOf(ticket, anyLive, dispatcherLive);
+  // Hold the pattern back until the agent has looked up the history, so the screen doesn't
+  // give away the context moment before it's said on the call.
+  const revealPattern = Boolean(
+    ticket?.pattern_flag &&
+      (viewingPast || ticket.events.some((e) => e.kind === "dispatch") || lines.tenant.some((l) => l.role === "tool" && l.text.startsWith("get_building_context"))),
+  );
 
   return (
-    <div className="hm-shell">
-      <header className="hm-header">
-        <div className="hm-brand">
-          <Logo />
-          <div>
-            <h1 className="hm-title">Hausmeister</h1>
-            <p className="hm-muted">The AI caretaker · {state.building?.name}, {state.building?.city}</p>
+    <div className="ui-app">
+      <Sidebar
+        state={state}
+        callTickets={callTickets}
+        selectedId={viewingPast ? ticket?.id ?? null : null}
+        live={anyLive}
+        onSelect={setSelectedId}
+        admin={adminKey !== null}
+        busy={busy}
+        onReset={() => confirm("Reset the demo? Deletes all call tickets and transcripts.") && admin("/api/demo/reset").then(() => setSelectedId(null))}
+      />
+
+      <div className="ui-main">
+        <header className="ui-topbar">
+          <nav className="ui-crumbs">
+            <span>Hausmeister</span>
+            <Sep />
+            <span>{state.building?.name}</span>
+            <Sep />
+            <b>{viewingPast && ticket ? `Ticket #${ticket.id}` : "Live"}</b>
+          </nav>
+          <div className="ui-topbar-right">
+            {viewingPast && (
+              <button className="ui-btn" onClick={() => setSelectedId(null)}>
+                <Icon name="arrowLeft" size={14} /> Back to live
+              </button>
+            )}
+            {adminKey !== null && ticket?.status === "open" && !viewingPast && (
+              <button className="ui-btn" disabled={busy} onClick={() => admin("/api/demo/dispatch", { ticket_id: ticket.id })}>
+                <Icon name="phone" size={14} /> Dispatch manually
+              </button>
+            )}
           </div>
-        </div>
-        <span className={`hm-status ${status.cls}`}>
-          <span className="hm-status-dot" />
-          {status.text}
-        </span>
-        <div className={`hm-timer-box ${stopAt ? "is-done" : timerRunning ? "is-live" : ""}`}>
-          <span className="hm-timer-label">{stopAt ? "Call → plumber booked" : timerRunning ? "Since the tenant called" : "Call timer"}</span>
-          <span className="hm-timer">{fmtClock(elapsed)}</span>
-        </div>
-      </header>
+        </header>
 
-      <ol className="hm-rail">
-        {STEPS.map((s, i) => (
-          <li key={s.key} className={`hm-rail-step ${done[s.key] ? "is-done" : i === nextStep && (timerRunning || current) ? "is-next" : ""}`}>
-            <span className="hm-rail-dot">{done[s.key] ? "✓" : i + 1}</span>
-            <span className="hm-rail-label">{s.label}</span>
-          </li>
-        ))}
-      </ol>
-
-      <main className="hm-grid">
-        <section className="hm-panel hm-building-panel">
-          <PanelHead title={state.building?.name ?? "Building"} tag="mock data" />
-          <Building units={state.units} tickets={state.tickets} current={current} serverNow={state.now} />
-          {state.building && (
-            <div className="hm-facts">
-              <Fact k="Built" v={String(state.building.build_year)} />
-              <Fact k="Boiler" v={state.building.boiler_type} />
-              <Fact k="Last service" v={state.building.last_boiler_service?.slice(0, 10)} />
+        <section className="ui-hero">
+          <div className="ui-hero-main">
+            <div className="ui-hero-meta">
+              <Badge tone={status.tone} pulse={status.pulse}>{status.label}</Badge>
+              {ticket && <span className="ui-mono ui-subtle">#{ticket.id}</span>}
+              {ticket && <span className="ui-subtle">{hhmm(ticket.created_at)}</span>}
             </div>
-          )}
-          {rule && (
-            <p className="hm-rule">
-              <span className="hm-tag">mock lease rule</span>
-              <b>{rule.responsible === "landlord" ? "Landlord pays." : "Tenant pays."}</b> {rule.note}
-            </p>
-          )}
+            <h1 className="ui-hero-title">
+              {ticket ? ticket.summary : anyLive ? "Call in progress…" : "Waiting for a call"}
+            </h1>
+            <div className="ui-hero-sub">
+              {ticket ? (
+                <>
+                  <span><Icon name="user" size={14} /> {ticket.tenant_name ?? "Unknown caller"}</span>
+                  <span><Icon name="building" size={14} /> Apartment {ticket.unit}</span>
+                  <span><Icon name={ISSUE_ICON[ticket.issue_type] ?? "wrench"} size={14} /> {cap(ticket.issue_type)}</span>
+                  <Urgency value={ticket.urgency} />
+                </>
+              ) : (
+                <span className="ui-subtle">
+                  {anyLive ? "The agent is triaging. The ticket appears as soon as it's created." : "When a tenant calls, the whole repair loop plays out here in real time."}
+                </span>
+              )}
+            </div>
+          </div>
+          <Timer elapsed={elapsed} running={running} done={Boolean(stopAt)} />
         </section>
 
-        <section className="hm-panel hm-ticket-panel">
-          {current ? (
-            <>
-              <div className="hm-ticket-head">
-                <span className="hm-ticket-id">Ticket #{current.id}</span>
-                <span className={`hm-pill hm-urg-${current.urgency}`}>{current.urgency}</span>
-                <span className="hm-pill">{ISSUE_ICON[current.issue_type] ?? "🔧"} {current.issue_type}</span>
-                <span className="hm-pill">Apt {current.unit}</span>
-              </div>
-              <h2 className="hm-summary">{current.summary}</h2>
-
-              {current.pattern_flag && current.pattern_note && (
-                <div className="hm-context">
-                  <span className="hm-context-label">Building history · pattern found</span>
-                  <p>{current.pattern_note}</p>
-                </div>
+        <div className="ui-grid">
+          <div className="ui-col">
+            <Card title="Activity" icon="activity">
+              <Activity ticket={ticket} tenantLines={lines.tenant} startedAt={startedAt} live={anyLive} />
+            </Card>
+            <Card title="Building" icon="building" aside={<span className="ui-chip">Mock data</span>}>
+              <BuildingMap units={state.units} tickets={state.tickets} ticket={ticket} serverNow={state.now} reveal={revealPattern} />
+              {state.building && (
+                <dl className="ui-kv ui-kv-compact">
+                  <dt>Address</dt><dd>{state.building.address}, {state.building.city}</dd>
+                  <dt>Built</dt><dd>{state.building.build_year}</dd>
+                  <dt>Boiler</dt><dd>{state.building.boiler_type}</dd>
+                </dl>
               )}
+            </Card>
+          </div>
 
-              {(current.photo_url || current.photo_assessment) && (
-                <div className="hm-vision">
-                  {current.photo_url ? (
+          <div className="ui-col">
+            {revealPattern && ticket?.pattern_note && (
+              <div className="ui-insight">
+                <div className="ui-insight-icon"><Icon name="sparkles" size={16} /></div>
+                <div>
+                  <div className="ui-insight-title">Pattern detected in stack {ticket.stack}</div>
+                  <p>{ticket.pattern_note}</p>
+                </div>
+              </div>
+            )}
+            {ticket?.status === "escalated" && (
+              <div className="ui-insight is-danger">
+                <div className="ui-insight-icon"><Icon name="alert" size={16} /></div>
+                <div>
+                  <div className="ui-insight-title">Escalated to the on-call manager</div>
+                  <p>{ticket.escalation_reason}</p>
+                </div>
+              </div>
+            )}
+            <Card title="Dispatch" icon="wrench">
+              {ticket?.contractor_name ? (
+                <ContractorRow ticket={ticket} />
+              ) : (
+                <Empty icon="wrench" text={ticket ? "No contractor called yet." : "Nothing to dispatch."} />
+              )}
+            </Card>
+            <Card title="Details" icon="ticket">
+              {ticket ? <Details ticket={ticket} rule={state.lease_rules.find((r) => r.issue_type === ticket.issue_type)} /> : <Empty icon="ticket" text="No ticket yet." />}
+            </Card>
+            {(ticket?.photo_url || ticket?.photo_assessment) && (
+              <Card title="Photo assessment" icon="camera">
+                <div className="ui-photo">
+                  {ticket.photo_url ? (
                     // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-                    <img src={current.photo_url} alt="Tenant's photo of the damage" />
+                    <img src={ticket.photo_url} alt="Tenant's photo of the damage" />
                   ) : (
-                    <div className="hm-vision-ph">📷</div>
+                    <div className="ui-photo-ph"><Icon name="camera" size={20} /></div>
                   )}
                   <div>
-                    <span className="hm-context-label hm-vision-label">Vision model</span>
-                    <p>{current.photo_assessment}</p>
-                    {current.photo_safety_advice && <p className="hm-advice">⚡ {current.photo_safety_advice}</p>}
-                  </div>
-                </div>
-              )}
-
-              {current.contractor_name && (
-                <div className={`hm-contractor ${current.booked_at ? "is-booked" : "is-calling"}`}>
-                  <span className="hm-avatar">{current.contractor_name.slice(0, 1)}</span>
-                  <div className="hm-contractor-body">
-                    <span className="hm-contractor-name">{current.contractor_name}</span>
-                    <span className="hm-muted">{current.contractor_company}</span>
-                  </div>
-                  <div className="hm-contractor-state">
-                    {current.booked_at ? (
-                      <>
-                        <span className="hm-booked-time">{current.scheduled_label}</span>
-                        <span>{current.visit_first && current.visit_first !== current.unit ? `Booked · starts in ${current.visit_first}` : "Booked"}</span>
-                      </>
-                    ) : (
-                      <span className="hm-ringing">☎ Calling…</span>
+                    <p>{ticket.photo_assessment}</p>
+                    {ticket.photo_safety_advice && (
+                      <p className="ui-advice"><Icon name="zap" size={13} /> {ticket.photo_safety_advice}</p>
                     )}
                   </div>
                 </div>
-              )}
+              </Card>
+            )}
+          </div>
 
-              {current.status === "escalated" && (
-                <div className="hm-escalated">🚨 Escalated to the on-call manager. {current.escalation_reason}</div>
-              )}
-
-              <ul className="hm-timeline">
-                {current.events.map((e) => (
-                  <li key={e.id} className={`k-${e.kind}`}>
-                    <time>{hhmm(e.created_at)}</time>
-                    <span>{e.message}</span>
-                  </li>
-                ))}
-              </ul>
-              {adminKey !== null && current.status === "open" && (
-                <button className="hm-btn" disabled={!!busy} onClick={() => admin("/api/demo/dispatch", { ticket_id: current.id })}>
-                  Backup: dispatch now
-                </button>
-              )}
-            </>
-          ) : (
-            <div className="hm-empty">
-              <span className="hm-empty-icon">☎</span>
-              <h2 className="hm-summary">{tenantLive ? "Listening…" : "Ready for a call"}</h2>
-              <p className="hm-muted">
-                {tenantLive
-                  ? "The agent is triaging. The ticket appears the moment it's created."
-                  : "A tenant calls the Hausmeister number. Everything that happens next shows up here, live."}
-              </p>
-            </div>
-          )}
-        </section>
-
-        <section className="hm-panel hm-transcript">
-          <Lane title="Tenant call" live={tenantLive} lines={tenantLines} who={{ user: "Tenant", assistant: "Hausmeister" }} />
-          <Lane title="Contractor call" live={dispatcherLive} lines={dispatcherLines} who={{ user: current?.contractor_name ?? "Contractor", assistant: "Dispatcher" }} />
-        </section>
-      </main>
-
-      <footer className="hm-footer">
-        <div className="hm-history">
-          <span className="hm-tag">mock data</span>
-          <span className="hm-muted">Building history</span>
-          {history.map((t) => (
-            <span key={t.id} className={`hm-chip ${t.status === "resolved" ? "" : "is-open"}`}>
-              {ISSUE_ICON[t.issue_type] ?? "🔧"} {t.unit} · {t.issue_type}
-            </span>
-          ))}
+          <Conversation
+            key={ticket?.id ?? "none"}
+            tenant={lines.tenant}
+            dispatcher={lines.dispatcher}
+            tenantLive={tenantLive}
+            dispatcherLive={dispatcherLive}
+            contractor={ticket?.contractor_name ?? "Contractor"}
+            tenantName={ticket?.tenant_name ?? "Tenant"}
+          />
         </div>
-        {adminKey !== null && (
-          <button
-            className="hm-btn hm-btn-quiet"
-            disabled={!!busy}
-            onClick={() => confirm("Reset the demo? Deletes all call tickets and transcripts.") && admin("/api/demo/reset")}
-          >
-            Reset demo
-          </button>
-        )}
-      </footer>
+      </div>
     </div>
   );
 }
 
-const ISSUE_ICON: Record<string, string> = {
-  leak: "💧", heating: "🔥", electrical: "⚡", lock: "🔑", appliance: "🧺", pest: "🐜", other: "🔧",
+// ---------------------------------------------------------------------------
+// Pieces
+// ---------------------------------------------------------------------------
+
+function statusOf(t: Ticket | null, live: boolean, dispatcherLive: boolean): { label: string; tone: Tone; pulse?: boolean } {
+  if (t?.status === "escalated") return { label: "Escalated", tone: "danger" };
+  if (t?.booked_at) return { label: "Booked", tone: "success" };
+  if (dispatcherLive) return { label: "Calling contractor", tone: "info", pulse: true };
+  if (live) return { label: "Live call", tone: "live", pulse: true };
+  if (t?.status === "dispatching") return { label: "Dispatching", tone: "info" };
+  if (t) return { label: cap(t.status), tone: "neutral" };
+  return { label: "Idle", tone: "neutral" };
+}
+
+function Sidebar({ state, callTickets, selectedId, live, onSelect, admin, busy, onReset }: {
+  state: State; callTickets: Ticket[]; selectedId: number | null; live: boolean; onSelect: (id: number | null) => void;
+  admin: boolean; busy: boolean; onReset: () => void;
+}) {
+  const history = state.tickets.filter((t) => t.seed);
+  return (
+    <aside className="ui-sidebar">
+      <div className="ui-brand">
+        <Logo />
+        <div>
+          <div className="ui-brand-name">Hausmeister</div>
+          <div className="ui-subtle">{state.building?.name} · {state.building?.city}</div>
+        </div>
+      </div>
+
+      <nav className="ui-nav">
+        <button className={`ui-nav-item ${selectedId === null ? "is-active" : ""}`} onClick={() => onSelect(null)}>
+          <Icon name="radio" size={16} />
+          <span>Live</span>
+          {live && <span className="ui-live-dot" />}
+        </button>
+      </nav>
+
+      <div className="ui-nav-section">
+        <div className="ui-nav-heading">Calls</div>
+        {callTickets.length === 0 && <div className="ui-nav-empty">No calls yet</div>}
+        {callTickets.slice(0, 8).map((t) => (
+          <TicketLink key={t.id} t={t} active={selectedId === t.id} onClick={() => onSelect(t.id)} />
+        ))}
+      </div>
+
+      <div className="ui-nav-section ui-nav-history">
+        <div className="ui-nav-heading">Building history <span className="ui-chip">Mock</span></div>
+        {history.map((t) => (
+          <TicketLink key={t.id} t={t} active={selectedId === t.id} onClick={() => onSelect(t.id)} />
+        ))}
+      </div>
+
+      {admin && (
+        <div className="ui-sidebar-foot">
+          <button className="ui-btn ui-btn-block" disabled={busy} onClick={onReset}>
+            <Icon name="rotate" size={14} /> Reset demo
+          </button>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function TicketLink({ t, active, onClick }: { t: Ticket; active: boolean; onClick: () => void }) {
+  return (
+    <button className={`ui-ticket-link ${active ? "is-active" : ""}`} onClick={onClick}>
+      <span className={`ui-dot tone-${statusTone(t.status)}`} />
+      <span className="ui-ticket-link-body">
+        <span className="ui-ticket-link-title">{t.summary}</span>
+        <span className="ui-subtle">{t.unit} · {cap(t.issue_type)} · {cap(t.status)}</span>
+      </span>
+    </button>
+  );
+}
+
+function statusTone(s: string): Tone {
+  return s === "scheduled" || s === "resolved" ? (s === "resolved" ? "neutral" : "success") : s === "escalated" ? "danger" : s === "dispatching" ? "info" : "warning";
+}
+
+function Timer({ elapsed, running, done }: { elapsed: number; running: boolean; done: boolean }) {
+  const pct = Math.min(100, (elapsed / 1000 / TARGET_SECONDS) * 100);
+  const over = elapsed / 1000 > TARGET_SECONDS;
+  return (
+    <div className={`ui-timer ${done ? "is-done" : running ? "is-running" : ""}`}>
+      <div className="ui-timer-label">{done ? "Call to contractor booked" : "Time since call started"}</div>
+      <div className="ui-timer-value ui-mono">{fmtClock(elapsed)}</div>
+      <div className="ui-timer-bar"><span style={{ width: `${pct}%` }} className={over ? "is-over" : ""} /></div>
+      <div className="ui-timer-scale ui-subtle"><span>0:00</span><span>Target {TARGET_SECONDS}s</span></div>
+    </div>
+  );
+}
+
+const ACTIVITY = [
+  { key: "call", label: "Caller identified", icon: "phone" },
+  { key: "created", label: "Ticket created", icon: "ticket" },
+  { key: "photo", label: "Photo assessed", icon: "camera" },
+  { key: "pattern", label: "Building history checked", icon: "history" },
+  { key: "dispatch", label: "Contractor called", icon: "phone" },
+  { key: "booked", label: "Slot booked", icon: "calendar" },
+  { key: "sms", label: "Tenant notified", icon: "send" },
+] as const;
+
+function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | null; tenantLines: CallEvent[]; startedAt: string | null; live: boolean }) {
+  const ev = (k: string) => ticket?.events.find((e) => e.kind === k);
+  const historyLine = tenantLines.find((l) => l.role === "tool" && l.text.startsWith("get_building_context"));
+  const smsEvent = ticket?.events.find((e) => e.kind === "sms" && /tenant/i.test(e.message));
+  const steps: Record<string, { at?: string; detail?: string; state?: "done" | "warn" | "skip" }> = {
+    call: tenantLines[0] || ticket
+      ? { at: tenantLines[0]?.created_at ?? ticket?.call_started_at ?? undefined, detail: ticket?.tenant_name ? `${ticket.tenant_name} · ${ticket.unit}` : undefined, state: "done" }
+      : {},
+    created: ev("created") ? { at: ev("created")!.created_at, detail: ticket ? `${cap(ticket.urgency)} ${ticket.issue_type}` : undefined, state: "done" } : {},
+    photo: ev("photo")
+      ? { at: ev("photo")!.created_at, detail: "Vision model", state: "done" }
+      : ticket && (ev("dispatch") || ev("pattern")) ? { state: "skip", detail: "Not needed" } : {},
+    // When the agent asked for the history (its tool call), not when the ticket stored the pattern.
+    pattern: historyLine || ev("pattern")
+      ? {
+          at: historyLine?.created_at ?? ev("pattern")?.created_at,
+          detail: ticket?.pattern_flag ? `Pattern found · visit ${ticket.visit_first} first` : "No pattern",
+          state: "done",
+        }
+      : ev("dispatch") ? { state: "done", detail: "No pattern" } : {},
+    dispatch: ev("dispatch") ? { at: ev("dispatch")!.created_at, detail: ticket?.contractor_name ?? undefined, state: "done" } : {},
+    booked: ev("booked") ? { at: ev("booked")!.created_at, detail: ticket?.scheduled_label ?? undefined, state: "done" } : {},
+    sms: smsEvent
+      ? smsEvent.message.startsWith("Tenant texted")
+        ? { at: smsEvent.created_at, detail: "SMS delivered", state: "done" }
+        : { at: smsEvent.created_at, detail: "SMS not configured", state: "warn" }
+      : {},
+  };
+  const firstOpen = ACTIVITY.findIndex((a) => !steps[a.key].state);
+  const base = startedAt ? Date.parse(startedAt) : null;
+
+  return (
+    <ol className="ui-activity">
+      {ACTIVITY.map((a, i) => {
+        const s = steps[a.key];
+        const state = s.state ?? (i === firstOpen && (live || ticket?.status === "dispatching") ? "active" : "pending");
+        return (
+          <li key={a.key} className={`ui-step is-${state}`}>
+            <span className="ui-step-icon">
+              {state === "done" ? <Icon name="check" size={12} /> : state === "warn" ? "!" : state === "active" ? <span className="ui-spinner" /> : null}
+            </span>
+            <span className="ui-step-body">
+              <span className="ui-step-label">{a.label}</span>
+              {s.detail && <span className="ui-subtle">{s.detail}</span>}
+            </span>
+            <span className="ui-step-time ui-mono">{s.at && base ? offset(Date.parse(s.at) - base) : ""}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function ContractorRow({ ticket }: { ticket: Ticket }) {
+  const booked = Boolean(ticket.booked_at);
+  return (
+    <div className={`ui-contractor ${booked ? "is-booked" : "is-calling"}`}>
+      <span className="ui-avatar">{ticket.contractor_name!.slice(0, 1)}</span>
+      <div className="ui-contractor-body">
+        <div className="ui-contractor-name">
+          {ticket.contractor_name}
+          {ticket.contractor_rating && <span className="ui-subtle"> · ★ {ticket.contractor_rating}</span>}
+        </div>
+        <div className="ui-subtle">{ticket.contractor_company}</div>
+      </div>
+      <div className="ui-contractor-state">
+        {booked ? (
+          <>
+            <div className="ui-contractor-time">{cap(ticket.scheduled_label ?? "")}</div>
+            <Badge tone="success">Confirmed</Badge>
+          </>
+        ) : ticket.status === "dispatching" ? (
+          <Badge tone="info" pulse>Ringing</Badge>
+        ) : (
+          <Badge tone="neutral">{cap(ticket.status)}</Badge>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Details({ ticket, rule }: { ticket: Ticket; rule?: { responsible: string; note: string } }) {
+  return (
+    <dl className="ui-kv">
+      <dt>Status</dt><dd><Badge tone={statusTone(ticket.status)}>{cap(ticket.status)}</Badge></dd>
+      <dt>Urgency</dt><dd><Urgency value={ticket.urgency} /></dd>
+      <dt>Issue</dt><dd>{cap(ticket.issue_type)}</dd>
+      <dt>Apartment</dt><dd>{ticket.unit} <span className="ui-subtle">· stack {ticket.stack}</span></dd>
+      {ticket.visit_first && ticket.visit_first !== ticket.unit && (<><dt>Visit first</dt><dd>{ticket.visit_first}</dd></>)}
+      {ticket.dispatch_attempts > 1 && (<><dt>Contractors tried</dt><dd>{ticket.dispatch_attempts}</dd></>)}
+      {rule && (
+        <>
+          <dt>Who pays</dt>
+          <dd>{rule.responsible === "landlord" ? "Landlord" : "Tenant"} <span className="ui-chip">Mock rule</span></dd>
+        </>
+      )}
+    </dl>
+  );
+}
+
+function BuildingMap({ units, tickets, ticket, serverNow, reveal }: { units: Unit[]; tickets: Ticket[]; ticket: Ticket | null; serverNow: string; reveal: boolean }) {
+  const stacks = [...new Set(units.map((u) => u.stack))].sort();
+  const floors = [...new Set(units.map((u) => u.floor))].sort((a, b) => b - a);
+  const recent = Date.parse(serverNow) - 30 * 86400e3;
+  return (
+    <div>
+      <div className="ui-map" style={{ gridTemplateColumns: `28px repeat(${stacks.length}, 1fr)` }}>
+        <span />
+        {stacks.map((s) => (
+          <span key={s} className={`ui-map-col ${reveal && ticket?.stack === s ? "is-hot" : ""}`}>Stack {s}</span>
+        ))}
+        {floors.map((f) => (
+          <MapRow key={f} floor={f} stacks={stacks} units={units} tickets={tickets} ticket={ticket} recent={recent} reveal={reveal} />
+        ))}
+      </div>
+      <div className="ui-legend">
+        <span><i className="ui-legend-swatch is-report" /> Similar report</span>
+        <span><i className="ui-legend-swatch is-caller" /> Caller</span>
+        <span><i className="ui-legend-swatch is-first" /> Visit first</span>
+      </div>
+    </div>
+  );
+}
+
+function MapRow({ floor, stacks, units, tickets, ticket, recent, reveal }: { floor: number; stacks: string[]; units: Unit[]; tickets: Ticket[]; ticket: Ticket | null; recent: number; reveal: boolean }) {
+  return (
+    <>
+      <span className="ui-map-floor ui-mono">{floor}</span>
+      {stacks.map((s) => {
+        const u = units.find((x) => x.floor === floor && x.stack === s);
+        if (!u) return <span key={s} className="ui-map-cell is-void" />;
+        const reported = Boolean(
+          reveal && ticket && tickets.some((t) => t.id !== ticket.id && t.unit === u.label && t.issue_type === ticket.issue_type && t.status !== "resolved" && Date.parse(t.created_at) > recent),
+        );
+        const caller = ticket?.unit === u.label;
+        const first = Boolean(reveal && ticket?.visit_first === u.label);
+        return (
+          <div key={s} className={`ui-map-cell ${reported ? "is-report" : ""} ${caller ? "is-caller" : ""} ${first ? "is-first" : ""}`}>
+            <span>{u.label}</span>
+            {first && <span className="ui-map-tag">1st</span>}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function Conversation({ tenant, dispatcher, tenantLive, dispatcherLive, contractor, tenantName }: {
+  tenant: CallEvent[]; dispatcher: CallEvent[]; tenantLive: boolean; dispatcherLive: boolean; contractor: string; tenantName: string;
+}) {
+  const [picked, setPicked] = useState<"tenant" | "dispatcher" | null>(null);
+  // Follow the live call unless the viewer picked a tab.
+  const auto = dispatcherLive || (!tenantLive && dispatcher.length > 0) ? "dispatcher" : "tenant";
+  const tab = picked ?? auto;
+  const lines = tab === "tenant" ? tenant : dispatcher;
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" });
+  }, [lines.length, tab]);
+  const who = tab === "tenant" ? { user: tenantName, agent: "Hausmeister" } : { user: contractor, agent: "Dispatcher" };
+
+  return (
+    <section className="ui-card ui-convo">
+      <div className="ui-card-head">
+        <div className="ui-card-title"><Icon name="message" size={15} /> Conversation</div>
+        <div className="ui-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "tenant"} className={tab === "tenant" ? "is-active" : ""} onClick={() => setPicked("tenant")}>
+            Tenant {tenantLive && <span className="ui-live-dot" />}
+          </button>
+          <button role="tab" aria-selected={tab === "dispatcher"} className={tab === "dispatcher" ? "is-active" : ""} onClick={() => setPicked("dispatcher")}>
+            Contractor {dispatcherLive && <span className="ui-live-dot" />}
+          </button>
+        </div>
+      </div>
+      <div ref={ref} className="ui-messages">
+        {lines.length === 0 && <Empty icon="message" text={tab === "tenant" ? "The tenant's call will appear here." : "The call to the contractor will appear here."} />}
+        {lines.map((l) =>
+          l.role === "tool" ? (
+            <div key={l.id} className="ui-msg-tool">
+              <Icon name="terminal" size={12} />
+              <span>{toolText(l.text)}</span>
+              <span className="ui-mono ui-subtle">{hhmm(l.created_at)}</span>
+            </div>
+          ) : l.role === "system" ? (
+            <div key={l.id} className="ui-msg-system">{l.text}</div>
+          ) : (
+            <div key={l.id} className={`ui-msg ${l.role === "user" ? "is-user" : "is-agent"}`}>
+              <div className="ui-msg-who">{l.role === "user" ? who.user : who.agent}</div>
+              <div className="ui-msg-text">{l.text}</div>
+            </div>
+          ),
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Primitives
+// ---------------------------------------------------------------------------
+
+type Tone = "neutral" | "success" | "warning" | "danger" | "info" | "live";
+
+function Badge({ tone, pulse, children }: { tone: Tone; pulse?: boolean; children: React.ReactNode }) {
+  return (
+    <span className={`ui-badge tone-${tone}`}>
+      <span className={`ui-dot tone-${tone} ${pulse ? "is-pulse" : ""}`} />
+      {children}
+    </span>
+  );
+}
+
+function Urgency({ value }: { value: string }) {
+  return <Badge tone={value === "emergency" ? "danger" : value === "urgent" ? "warning" : "neutral"}>{cap(value)}</Badge>;
+}
+
+function Card({ title, icon, aside, children }: { title: string; icon: IconName; aside?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="ui-card">
+      <div className="ui-card-head">
+        <div className="ui-card-title"><Icon name={icon} size={15} /> {title}</div>
+        {aside}
+      </div>
+      <div className="ui-card-body">{children}</div>
+    </section>
+  );
+}
+
+function Empty({ icon, text }: { icon: IconName; text: string }) {
+  return (
+    <div className="ui-empty">
+      <Icon name={icon} size={18} />
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function Sep() {
+  return <span className="ui-sep">/</span>;
+}
+
+function Logo() {
+  return (
+    <span className="ui-logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18">
+        <path d="M12 21a6 6 0 0 0 6-6c0-1.7-.9-3.3-2.6-4.7S12.4 6.9 12 4.6c-.4 2.3-1.7 4.3-3.4 5.7S6 13.3 6 15a6 6 0 0 0 6 6Z" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
+const ICONS = {
+  phone: "M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z",
+  check: "M20 6 9 17l-5-5",
+  droplet: "M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z",
+  building: "M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2 M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2 M10 6h4 M10 10h4 M10 14h4 M10 18h4",
+  ticket: "M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z M13 5v2 M13 17v2 M13 11v2",
+  camera: "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z M15 13a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
+  history: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5 M12 7v5l4 2",
+  wrench: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z",
+  alert: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z M12 9v4 M12 17h.01",
+  user: "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2 M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
+  message: "M7.9 20A9 9 0 1 0 4 16.1L2 22Z",
+  sparkles: "M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z",
+  rotate: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5",
+  zap: "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
+  send: "M14.54 21.69a.5.5 0 0 0 .94-.03l6.5-19a.5.5 0 0 0-.64-.63l-19 6.5a.5.5 0 0 0-.02.93l7.93 3.18a2 2 0 0 1 1.11 1.11z M21.85 2.15 10.91 13.09",
+  calendar: "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+  arrowLeft: "m12 19-7-7 7-7 M19 12H5",
+  radio: "M4.9 19.1C1 15.2 1 8.8 4.9 4.9 M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5 M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5 M19.1 4.9C23 8.8 23 15.1 19.1 19 M14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0",
+  activity: "M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2",
+  terminal: "m4 17 6-6-6-6 M12 19h8",
+  flame: "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z",
+  key: "m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4 M21 2l-9.6 9.6 M15.5 12a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0",
+} as const;
+type IconName = keyof typeof ICONS;
+
+const ISSUE_ICON: Record<string, IconName> = {
+  leak: "droplet", heating: "flame", electrical: "zap", lock: "key", appliance: "wrench", pest: "alert", other: "wrench",
 };
+
+function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
+  return (
+    <svg className="ui-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICONS[name].split(/ (?=M|m)/).map((d, i) => <path key={i} d={d} />)}
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Formatting
+// ---------------------------------------------------------------------------
 
 const TOOL_LABEL: Record<string, string> = {
   lookup_tenant: "Caller ID checked",
@@ -346,7 +737,7 @@ const TOOL_LABEL: Record<string, string> = {
   confirm_slot: "Slot booked",
 };
 
-/** New rows are already plain language; older rows were "name → {json}". */
+/** New rows are already plain language ("name → text"); older rows were "name → {json}". */
 function toolText(text: string) {
   const m = text.match(/^(\w+) (→|✗) ([\s\S]*)$/);
   if (!m) return text;
@@ -355,131 +746,20 @@ function toolText(text: string) {
   return `${TOOL_LABEL[name] ?? name}${arrow === "✗" ? " failed" : ""}`;
 }
 
-function isLive(lines: CallEvent[], now: number) {
-  const last = lines.at(-1);
-  if (!last) return false;
-  if (last.role === "system" && last.text === "Call ended") return false;
-  return now - Date.parse(last.created_at) < 5 * 60e3;
+function fmtClock(ms: number) {
+  const s = Math.max(0, ms) / 1000;
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 }
 
-function Logo() {
-  return (
-    <svg className="hm-logo" viewBox="0 0 40 40" aria-hidden="true">
-      <path d="M6 19 20 7l14 12v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2Z" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinejoin="round" />
-      <path d="M20 17c3 4 4.6 6.4 4.6 8.4a4.6 4.6 0 0 1-9.2 0c0-2 1.6-4.4 4.6-8.4Z" fill="var(--water)" />
-    </svg>
-  );
+function offset(ms: number) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return `+${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function PanelHead({ title, tag }: { title: string; tag?: string }) {
-  return (
-    <div className="hm-panel-head">
-      <h2>{title}</h2>
-      {tag && <span className="hm-tag">{tag}</span>}
-    </div>
-  );
+function hhmm(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
 }
 
-function Fact({ k, v }: { k: string; v?: string }) {
-  return (
-    <div className="hm-fact">
-      <span>{k}</span>
-      <b>{v ?? "—"}</b>
-    </div>
-  );
-}
-
-function stepState(t: Ticket | null, tenantLines: CallEvent[]): Record<string, boolean> {
-  const kinds = new Set(t?.events.map((e) => e.kind));
-  return {
-    call: tenantLines.length > 0 || Boolean(t),
-    ticket: Boolean(t),
-    photo: kinds.has("photo"),
-    pattern: kinds.has("pattern") || tenantLines.some((l) => l.text.startsWith("get_building_context")),
-    dispatch: kinds.has("dispatch"),
-    booked: kinds.has("booked"),
-    sms: [...(t?.events ?? [])].some((e) => e.kind === "sms" && e.message.startsWith("Tenant texted")),
-  };
-}
-
-function Building({ units, tickets, current, serverNow }: { units: Unit[]; tickets: Ticket[]; current: Ticket | null; serverNow: string }) {
-  const stacks = [...new Set(units.map((u) => u.stack))].sort();
-  const floors = [...new Set(units.map((u) => u.floor))].sort((a, b) => b - a);
-  const recent = Date.parse(serverNow) - 30 * 86400e3;
-  const patternStack = current?.pattern_flag ? current.stack : null;
-  return (
-    <div className="hm-house">
-      <div className="hm-roof" />
-      <div className="hm-facade" style={{ gridTemplateColumns: `2.6rem repeat(${stacks.length}, 1fr)` }}>
-        <span />
-        {stacks.map((s) => (
-          <span key={s} className={`hm-stack-label ${s === patternStack ? "is-pattern" : ""}`}>Stack {s}</span>
-        ))}
-        {floors.map((f) => (
-          <FloorRow key={f} floor={f} stacks={stacks} units={units} tickets={tickets} current={current} recent={recent} patternStack={patternStack} />
-        ))}
-      </div>
-      <div className="hm-ground" />
-    </div>
-  );
-}
-
-function FloorRow({ floor, stacks, units, tickets, current, recent, patternStack }: { floor: number; stacks: string[]; units: Unit[]; tickets: Ticket[]; current: Ticket | null; recent: number; patternStack: string | null }) {
-  return (
-    <>
-      <span className="hm-floor">{floor}F</span>
-      {stacks.map((s) => {
-        const u = units.find((x) => x.floor === floor && x.stack === s);
-        if (!u) return <span key={s} className="hm-unit is-void" />;
-        const same = current
-          ? tickets.filter((t) => t.unit === u.label && t.issue_type === current.issue_type && t.status !== "resolved" && Date.parse(t.created_at) > recent)
-          : [];
-        const isCaller = current?.unit === u.label;
-        const isFirst = Boolean(current?.pattern_flag && current.visit_first === u.label);
-        const inPattern = Boolean(patternStack && patternStack === u.stack && same.length > 0);
-        const cls = ["hm-unit", s === patternStack ? "in-riser" : "", inPattern ? "is-pattern" : "", isCaller ? "is-caller" : "", isFirst ? "is-first" : ""].join(" ");
-        return (
-          <div key={s} className={cls}>
-            <div className="hm-unit-top">
-              <b>{u.label}</b>
-              {inPattern && <span className="hm-drop">💧</span>}
-            </div>
-            {isFirst && <span className="hm-badge">Visit first</span>}
-            {isCaller && !isFirst && <span className="hm-badge hm-badge-caller">Calling now</span>}
-            {inPattern && !isCaller && <span className="hm-unit-note">{same[0].summary.split(",")[0]}</span>}
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-function Lane({ title, live, lines, who }: { title: string; live: boolean; lines: CallEvent[]; who: { user: string; assistant: string } }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" });
-  }, [lines.length]);
-  return (
-    <div className={`hm-lane ${live ? "is-live" : ""}`}>
-      <div className="hm-lane-head">
-        <h3>{title}</h3>
-        {live && <span className="hm-live">● Live</span>}
-      </div>
-      <div ref={ref} className="hm-lines">
-        {lines.length === 0 && <p className="hm-lane-empty">No call yet</p>}
-        {lines.map((l) =>
-          l.role === "tool" ? (
-            <p key={l.id} className="hm-msg-tool">⚙ {toolText(l.text)}</p>
-          ) : l.role === "system" ? (
-            <p key={l.id} className="hm-msg-system">{l.text}</p>
-          ) : (
-            <div key={l.id} className={`hm-msg ${l.role === "user" ? "is-user" : "is-agent"}`}>
-              <span className="hm-msg-who">{l.role === "user" ? who.user : who.assistant}</span>
-              <p>{l.text}</p>
-            </div>
-          ),
-        )}
-      </div>
-    </div>
-  );
+function cap(s: string) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
