@@ -2,6 +2,7 @@
 // Sends Vapi-shaped tool-call requests to the webhook, so it can be tested without a phone.
 //
 //   node scripts/fake-tool-call.mjs                          run the whole demo flow
+//   node scripts/fake-tool-call.mjs assistant-request        simulate the start of an inbound call
 //   node scripts/fake-tool-call.mjs create_ticket '{"unit":"3B","issue_type":"leak","urgency":"urgent","summary":"Ceiling drip"}'
 //
 // Env (read from .env.local if present):
@@ -53,12 +54,32 @@ async function callTool(name, args = {}) {
   return output;
 }
 
+/** What Vapi sends when an inbound call starts on a number with no fixed assistant. */
+async function assistantRequest() {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(secret ? { "x-vapi-secret": secret } : {}) },
+    body: JSON.stringify({
+      message: {
+        type: "assistant-request",
+        timestamp: Date.now(),
+        customer: { number: caller },
+        call: { id: callId, type: "inboundPhoneCall", createdAt: startedAt, customer: { number: caller } },
+      },
+    }),
+  });
+  console.log(`${res.status === 200 ? "✓" : "✗"} assistant-request  HTTP ${res.status}  ${await res.text()}`);
+}
+
 const [, , tool, rawArgs] = process.argv;
 
-if (tool) {
+if (tool === "assistant-request") {
+  await assistantRequest();
+} else if (tool) {
   await callTool(tool, rawArgs ? JSON.parse(rawArgs) : {});
 } else {
   console.log(`Demo flow against ${url} as ${caller}\n`);
+  await assistantRequest();
   await callTool("lookup_tenant");
   await callTool("get_building_context", { unit: "3b", issue_type: "leak" });
   const ticket = await callTool("create_ticket", {
