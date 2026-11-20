@@ -17,6 +17,7 @@ export async function GET() {
          pattern_flag, pattern_note, contractor_id, scheduled_at, call_started_at, booked_at, created_at, seed,
          tenant_call_id, dispatcher_call_id, dispatch_attempts, escalation_reason,
          contractor:contractors(name, company, trade, rating),
+         tenant:tenants(name),
          events:ticket_events(id, kind, message, created_at)`,
       )
       .order("id", { ascending: false })
@@ -33,7 +34,8 @@ export async function GET() {
   type TicketRow = Record<string, unknown> & {
     id: number; unit_id: number; visit_unit_id: number | null; contractor_id: number | null; photo_path: string | null;
     scheduled_at: string | null; events: { id: number; created_at: string }[];
-    contractor: { name: string; company: string | null } | null;
+    contractor: { name: string; company: string | null; rating: number } | null;
+    tenant: { name: string } | null;
   };
   const ticketRows = must(tickets, "tickets") as unknown as TicketRow[];
 
@@ -53,6 +55,10 @@ export async function GET() {
         visit_first: label(t.visit_unit_id),
         contractor_name: t.contractor?.name ?? null,
         contractor_company: t.contractor?.company ?? null,
+        contractor_rating: t.contractor?.rating ?? null,
+        tenant_name: t.tenant?.name ?? null,
+        tenant: undefined,
+        contractor: undefined,
         scheduled_label: t.scheduled_at ? formatTime(t.scheduled_at) : null,
         photo_url,
         events: [...(t.events ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id),
