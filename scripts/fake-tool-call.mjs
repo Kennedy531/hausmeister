@@ -1,98 +1,20 @@
-#!/usr/bin/env node
-// Sends Vapi-shaped tool-call requests to the webhook, so it can be tested without a phone.
-//
-//   node scripts/fake-tool-call.mjs                          run the whole demo flow
-//   node scripts/fake-tool-call.mjs assistant-request        simulate the start of an inbound call
-//   node scripts/fake-tool-call.mjs create_ticket '{"unit":"3B","issue_type":"leak","urgency":"urgent","summary":"Ceiling drip"}'
-//
-// Env (read from .env.local if present):
-//   VAPI_URL              default http://localhost:3000/api/vapi (or an ngrok / Vercel URL)
-//   VAPI_WEBHOOK_SECRET   sent as X-Vapi-Secret
-//   FAKE_CALLER           caller number, default the seeded 3B tenant placeholder
+// Sends a fake Vapi tool-calls payload to the webhook, like Vapi would.
+//   node scripts/fake-tool-call.mjs lookup_tenant '{}' +491510000003
+//   node scripts/fake-tool-call.mjs create_ticket '{"unit":"3B","issue_type":"leak","urgency":"urgent","summary":"Water dripping from the ceiling"}'
+import { env } from "./env.mjs";
 
-try {
-  process.loadEnvFile(".env.local");
-} catch {
-  // no .env.local: fine
-}
+const [name = "lookup_tenant", args = "{}", phone = env.DEMO_TENANT_PHONE ?? "+490000000003", callId = "fake-call-1"] = process.argv.slice(2);
+const base = env.WEBHOOK_BASE_URL ?? "http://localhost:3000";
 
-const url = process.env.VAPI_URL ?? "http://localhost:3000/api/vapi";
-const secret = process.env.VAPI_WEBHOOK_SECRET ?? "";
-const caller = process.env.FAKE_CALLER ?? "+490000000003";
-const callId = `fake-${Date.now()}`;
-const startedAt = new Date().toISOString();
-
-async function callTool(name, args = {}) {
-  const body = {
+const res = await fetch(`${base}/api/vapi`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-Vapi-Secret": env.VAPI_WEBHOOK_SECRET ?? "" },
+  body: JSON.stringify({
     message: {
       type: "tool-calls",
-      timestamp: Date.now(),
-      customer: { number: caller },
-      call: { id: callId, type: "inboundPhoneCall", createdAt: startedAt, customer: { number: caller } },
-      toolCallList: [{ id: `tc-${name}-${Date.now()}`, type: "function", function: { name, arguments: args } }],
+      call: { id: callId, startedAt: new Date().toISOString(), customer: { number: phone } },
+      toolCallList: [{ id: "tc-" + Date.now(), type: "function", function: { name, arguments: JSON.parse(args) } }],
     },
-  };
-  const t0 = Date.now();
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(secret ? { "x-vapi-secret": secret } : {}) },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json().catch(() => ({}));
-  const r = json.results?.[0];
-  const ms = Date.now() - t0;
-  if (res.status !== 200 || !r) {
-    console.log(`✗ ${name}  HTTP ${res.status}  ${JSON.stringify(json)}`);
-    return null;
-  }
-  if (r.error) {
-    console.log(`✗ ${name}  ${ms}ms  error: ${r.error}`);
-    return null;
-  }
-  const output = JSON.parse(r.result);
-  console.log(`✓ ${name}  ${ms}ms  ${r.result}`);
-  return output;
-}
-
-/** What Vapi sends when an inbound call starts on a number with no fixed assistant. */
-async function assistantRequest() {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(secret ? { "x-vapi-secret": secret } : {}) },
-    body: JSON.stringify({
-      message: {
-        type: "assistant-request",
-        timestamp: Date.now(),
-        customer: { number: caller },
-        call: { id: callId, type: "inboundPhoneCall", createdAt: startedAt, customer: { number: caller } },
-      },
-    }),
-  });
-  console.log(`${res.status === 200 ? "✓" : "✗"} assistant-request  HTTP ${res.status}  ${await res.text()}`);
-}
-
-const [, , tool, rawArgs] = process.argv;
-
-if (tool === "assistant-request") {
-  await assistantRequest();
-} else if (tool) {
-  await callTool(tool, rawArgs ? JSON.parse(rawArgs) : {});
-} else {
-  console.log(`Demo flow against ${url} as ${caller}\n`);
-  await assistantRequest();
-  await callTool("lookup_tenant");
-  await callTool("get_building_context", { unit: "3b", issue_type: "leak" });
-  const ticket = await callTool("create_ticket", {
-    unit: "3B",
-    issue_type: "leak",
-    urgency: "urgent",
-    summary: "Water dripping from the ceiling near the light fixture",
-  });
-  const id = ticket?.ticket_id ?? 0;
-  await callTool("send_photo_link", { ticket_id: id });
-  await callTool("check_photo", { ticket_id: String(id) }); // id as a string, like an LLM might send
-  await callTool("dispatch_contractor", { ticket_id: id, trade: "plumber" });
-  await callTool("confirm_slot", { ticket_id: id, slot_id: 1 });
-  console.log("\nExpected failure (bad arguments):");
-  await callTool("create_ticket", { unit: "3B", issue_type: "flood" });
-}
+  }),
+});
+console.log(res.status, JSON.stringify(await res.json(), null, 2));
