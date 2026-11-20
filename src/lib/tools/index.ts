@@ -190,7 +190,7 @@ export const tools: ToolHandlers = {
           : `Hausmeister: ${name}${company} is booked for ${when} at your flat ${t.unit.label} (ticket #${ticketId}).${firstNote}`;
       const sms = await sendSms(t.tenant.phone, body);
       smsSent = sms.sent;
-      await ticketEvent(ticketId, "sms", sms.sent ? `Tenant texted: "${body}"` : `Tenant SMS failed (${sms.error})`);
+      await ticketEvent(ticketId, "sms", sms.sent ? `Tenant texted: "${body}"` : `Tenant SMS not sent (${sms.error}): "${body}"`);
     }
     return {
       confirmed: true,

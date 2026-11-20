@@ -63,6 +63,31 @@ function short(v: unknown, max = 140): string {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
+/** A short human line for the transcript panel, instead of raw JSON. */
+function describe(name: string, out: unknown): string {
+  const o = (out ?? {}) as Record<string, unknown>;
+  switch (name) {
+    case "lookup_tenant":
+      return o.found ? `Caller ID matched ${o.tenant_name}, apartment ${o.unit}` : "Caller ID not on file";
+    case "create_ticket":
+      return `Ticket #${o.ticket_id} created`;
+    case "send_photo_link":
+      return o.sent ? "Photo link texted to the tenant" : "Photo link could not be sent";
+    case "check_photo":
+      return o.uploaded ? "Photo analysed by the vision model" : "Photo not uploaded yet";
+    case "get_building_context": {
+      const n = Array.isArray(o.similar_recent) ? o.similar_recent.length : 0;
+      return o.pattern ? `Pattern found: ${n} similar reports in the stack, visit ${o.visit_first} first` : "No pattern in the building history";
+    }
+    case "dispatch_contractor":
+      return o.started ? `Calling ${o.contractor_name}` : `Not dispatched: ${short(o.message, 90)}`;
+    case "confirm_slot":
+      return o.confirmed ? `Slot booked${o.tenant_sms_sent ? ", tenant texted" : ""}` : `Not booked: ${short(o.message, 90)}`;
+    default:
+      return short(out);
+  }
+}
+
 async function handleAssistantRequest(msg: Json, call: VapiCall) {
   const assistantId = process.env.VAPI_TENANT_ASSISTANT_ID;
   if (!assistantId) return { error: "The caretaker line is not configured yet." };
@@ -129,7 +154,7 @@ async function handleToolCalls(msg: Json, call: VapiCall, agent: Agent) {
     try {
       const out = await handler(args, ctx);
       results.push({ toolCallId: tc.id, name, result: JSON.stringify(out) });
-      if (ctx.callId) await callEvent({ callId: ctx.callId, agent, role: "tool", text: `${name} → ${short(out)}` });
+      if (ctx.callId) await callEvent({ callId: ctx.callId, agent, role: "tool", text: `${name} → ${describe(name, out)}` });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error(`tool ${name} failed`, e);
