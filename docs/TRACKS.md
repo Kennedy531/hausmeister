@@ -2,6 +2,8 @@
 
 Hausmeister is built by two people at once, each with their own Claude session, on separate branches. The tracks own **different files**, so merges are clean. They meet at a small set of shared files with stubs already in place, so each track can run end to end before the other one is finished.
 
+> **`dev` branch:** a first end-to-end version of both tracks (all tools real, webhook, both agents, dashboard, photo page, reset). Each track can merge `dev` into its branch and keep owning its files from there.
+
 The full product and demo plan lives in the team doc "Reltix Track — Build & Pitch Plan". This file is only about who builds what.
 
 | | Track A: Calls | Track B: Data & screens |
