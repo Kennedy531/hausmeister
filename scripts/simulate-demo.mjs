@@ -5,6 +5,7 @@
 //   WEBHOOK_BASE_URL=https://x.vercel.app node scripts/simulate-demo.mjs
 //   node scripts/simulate-demo.mjs --fast       (no pauses)
 //   node scripts/simulate-demo.mjs --no-answer  (Jan misses the call -> Mila is called)
+import { createHmac } from "node:crypto";
 import { env } from "./env.mjs";
 
 const base = env.WEBHOOK_BASE_URL ?? "http://localhost:3000";
@@ -91,11 +92,30 @@ await send({ type: "status-update", status: "ringing", call: dispatcherCall });
 await wait(2);
 await send({ type: "status-update", status: "in-progress", call: dispatcherCall });
 const slots = (await (await fetch(`${base}/api/dashboard`)).json()).tickets.find((x) => x.id === ticket.ticket_id).offered_slots;
-await say(dispatcherCall, "assistant", `Hi, this is Hausmeister calling about a job at Building B. Water through the ceiling in ${unit}, and you should start in ${ctx.visit_first} upstairs. I can offer ${slots.map((s) => s.label).join(", or ")}. Which works?`);
+// The plumber speaks Dutch: the dispatcher briefs him in Dutch (the dashboard subtitles it in English).
+await say(dispatcherCall, "assistant", `Hoi, met Hausmeister. Water door het plafond in ${unit}, en u begint het best in ${ctx.visit_first} erboven. Ik kan ${slots.map((s) => s.label).join(" of ")} aanbieden. Wat past?`);
 await wait(4);
-await say(dispatcherCall, "user", "The first one works.");
+await say(dispatcherCall, "user", "De eerste is prima.");
 const booked = await tool(dispatcherCall, "confirm_slot", { ticket_id: ticket.ticket_id, slot_id: slots[0].id });
-await say(dispatcherCall, "assistant", "Perfect, you're booked. I've texted the tenant. Thanks!");
+await say(dispatcherCall, "assistant", "Top, u staat ingepland. Ik heb de huurder een sms gestuurd. Bedankt!");
 await send({ type: "status-update", status: "ended", call: dispatcherCall });
+// What Vapi reports when each call ends (cost in USD), for the impact card.
+await send({ type: "end-of-call-report", endedReason: "customer-ended-call", cost: 0.21, call: tenantCall });
+await send({ type: "end-of-call-report", endedReason: "assistant-ended-call", cost: 0.14, call: dispatcherCall });
+
+// The neighbour in 4B replies YES to the access text (signed like Twilio does it).
+if (env.TWILIO_AUTH_TOKEN && env.DEMO_NEIGHBOUR_PHONE) {
+  await wait(4);
+  const url = `${(env.PUBLIC_BASE_URL ?? base).replace(/\/$/, "")}/api/sms/inbound`;
+  const params = { From: env.DEMO_NEIGHBOUR_PHONE, Body: "YES" };
+  const signed = Object.keys(params).sort().reduce((acc, k) => acc + k + params[k], url);
+  const signature = createHmac("sha1", env.TWILIO_AUTH_TOKEN).update(signed).digest("base64");
+  const r = await fetch(`${base}/api/sms/inbound`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": signature },
+    body: new URLSearchParams(params),
+  });
+  console.log("   neighbour replied YES ->", r.status, (await r.text()).slice(0, 120));
+}
 
 console.log("6. Loop closed:", booked.confirmed ? "booked" : booked.message);

@@ -8,12 +8,12 @@ interface Event { id: number; kind: string; message: string; created_at: string 
 interface Ticket {
   id: number; unit: string; stack: string; visit_first: string | null; issue_type: string; urgency: string; status: string;
   summary: string; pattern_flag: boolean; pattern_note: string | null; photo_url: string | null; photo_assessment: string | null;
-  photo_safety_advice: string | null; contractor_name: string | null; contractor_company: string | null; contractor_rating: number | null;
+  photo_safety_advice: string | null; contractor_name: string | null; contractor_company: string | null; contractor_rating: number | null; contractor_language: string | null;
   tenant_name: string | null; scheduled_label: string | null; call_started_at: string | null; booked_at: string | null;
   created_at: string; seed: boolean; tenant_call_id: string | null; dispatcher_call_id: string | null; dispatch_attempts: number;
   escalation_reason: string | null; events: Event[];
 }
-interface CallEvent { id: number; call_id: string; agent: "tenant" | "dispatcher"; role: string; text: string; ticket_id: number | null; created_at: string }
+interface CallEvent { id: number; call_id: string; agent: "tenant" | "dispatcher"; role: string; text: string; lang: string | null; translation: string | null; ticket_id: number | null; created_at: string }
 interface Unit { id: number; label: string; floor: number; stack: string }
 interface State {
   now: string;
@@ -269,6 +269,7 @@ export default function DashboardView() {
           </div>
 
           <div className="ui-col">
+            {ticket?.booked_at && <Impact ticket={ticket} tickets={state.tickets} serverNow={state.now} />}
             {revealPattern && ticket?.pattern_note && (
               <div className="ui-insight">
                 <div className="ui-insight-icon"><Icon name="sparkles" size={16} /></div>
@@ -289,7 +290,10 @@ export default function DashboardView() {
             )}
             <Card title="Dispatch" icon="wrench">
               {ticket?.contractor_name ? (
-                <ContractorRow ticket={ticket} />
+                <>
+                  <ContractorRow ticket={ticket} />
+                  <NeighbourRow ticket={ticket} />
+                </>
               ) : (
                 <Empty icon="wrench" text={ticket ? "No contractor called yet." : "Nothing to dispatch."} />
               )}
@@ -432,6 +436,7 @@ const ACTIVITY = [
   { key: "dispatch", label: "Contractor called", icon: "phone" },
   { key: "booked", label: "Slot booked", icon: "calendar" },
   { key: "sms", label: "Tenant notified", icon: "send" },
+  { key: "neighbour", label: "Neighbour asked for access", icon: "key" },
 ] as const;
 
 function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | null; tenantLines: CallEvent[]; startedAt: string | null; live: boolean }) {
@@ -462,6 +467,16 @@ function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | n
         : { at: smsEvent.created_at, detail: "SMS not configured", state: "warn" }
       : {},
   };
+  const accessEv = ev("access");
+  const askedEv = ev("neighbour");
+  const notSent = Boolean(askedEv?.message.includes("not texted"));
+  steps.neighbour = accessEv
+    ? { at: accessEv.created_at, detail: accessEv.message, state: "done" }
+    : askedEv
+      ? { at: askedEv.created_at, detail: notSent ? "SMS not configured" : "Waiting for reply", state: notSent ? "warn" : "done" }
+      : ev("booked") && (!ticket?.visit_first || ticket.visit_first === ticket.unit)
+        ? { state: "skip", detail: "Not needed" }
+        : {};
   const firstOpen = ACTIVITY.findIndex((a) => !steps[a.key].state);
   const base = startedAt ? Date.parse(startedAt) : null;
 
@@ -511,6 +526,62 @@ function ContractorRow({ ticket }: { ticket: Ticket }) {
           <Badge tone="neutral">{cap(ticket.status)}</Badge>
         )}
       </div>
+    </div>
+  );
+}
+
+function NeighbourRow({ ticket }: { ticket: Ticket }) {
+  const access = ticket.events.find((e) => e.kind === "access");
+  const asked = ticket.events.find((e) => e.kind === "neighbour");
+  const shown = access ?? asked;
+  if (!shown) return null;
+  const notSent = !access && shown.message.includes("not texted");
+  return (
+    <div className="ui-neighbour">
+      <span className="ui-neighbour-icon"><Icon name="key" size={14} /></span>
+      <div className="ui-contractor-body">
+        <div>Access to {ticket.visit_first}</div>
+        <div className="ui-subtle">{shown.message}</div>
+      </div>
+      {access ? <Badge tone="success">Confirmed</Badge> : notSent ? <Badge tone="warning">Not sent</Badge> : <Badge tone="info" pulse>Awaiting reply</Badge>}
+    </div>
+  );
+}
+
+/** Shown once the job is booked: the business case in four numbers. */
+function Impact({ ticket, tickets, serverNow }: { ticket: Ticket; tickets: Ticket[]; serverNow: string }) {
+  const start = ticket.call_started_at ? Date.parse(ticket.call_started_at) : null;
+  const seconds = start && ticket.booked_at ? Math.round((Date.parse(ticket.booked_at) - start) / 1000) : null;
+  const recent = Date.parse(serverNow) - 30 * 86400e3;
+  // One visit covers every open report of the same issue in the stack.
+  const covered = ticket.pattern_flag
+    ? tickets.filter(
+        (t) => t.id !== ticket.id && t.stack === ticket.stack && t.issue_type === ticket.issue_type && t.status !== "resolved" && Date.parse(t.created_at) > recent,
+      ).length
+    : 0;
+  const cost = ticket.events.filter((e) => e.kind === "cost").reduce((sum, e) => sum + (Number(e.message.split(" ")[1]) || 0), 0);
+  const notified = 1 + (ticket.events.some((e) => e.kind === "neighbour" || e.kind === "access") ? 1 : 0);
+  const langs = [...new Set(["en", ticket.contractor_language ?? "en"])].map((l) => l.toUpperCase()).join(" → ");
+  const typical = process.env.NEXT_PUBLIC_TYPICAL_RESPONSE;
+  return (
+    <section className="ui-impact">
+      <div className="ui-impact-head"><Icon name="sparkles" size={14} /> What this call did</div>
+      <div className="ui-impact-grid">
+        <Stat value={seconds !== null ? fmtDuration(seconds) : "—"} label="Call to plumber booked" note={typical ? `Typical: ${typical}` : undefined} />
+        <Stat value={String(covered)} label={covered === 1 ? "Extra visit saved" : "Extra visits saved"} note={covered > 0 ? `${covered + 1} reports, 1 visit` : undefined} />
+        <Stat value={String(notified)} label="Residents notified" note={notified > 1 ? "Caller + neighbour" : "Caller"} />
+        <Stat value={cost > 0 ? `$${cost.toFixed(2)}` : langs} label={cost > 0 ? "Cost of the calls" : "Languages"} note={cost > 0 ? langs : undefined} />
+      </div>
+    </section>
+  );
+}
+
+function Stat({ value, label, note }: { value: string; label: string; note?: string }) {
+  return (
+    <div className="ui-stat">
+      <div className="ui-stat-value">{value}</div>
+      <div className="ui-stat-label">{label}</div>
+      {note && <div className="ui-stat-note">{note}</div>}
     </div>
   );
 }
@@ -585,6 +656,7 @@ function Conversation({ tenant, dispatcher, tenantLive, dispatcherLive, contract
   tenant: CallEvent[]; dispatcher: CallEvent[]; tenantLive: boolean; dispatcherLive: boolean; contractor: string; tenantName: string;
 }) {
   const [picked, setPicked] = useState<"tenant" | "dispatcher" | null>(null);
+  const [subtitles, setSubtitles] = useState(true);
   // Follow the live call unless the viewer picked a tab.
   const auto = dispatcherLive || (!tenantLive && dispatcher.length > 0) ? "dispatcher" : "tenant";
   const tab = picked ?? auto;
@@ -599,6 +671,12 @@ function Conversation({ tenant, dispatcher, tenantLive, dispatcherLive, contract
     <section className="ui-card ui-convo">
       <div className="ui-card-head">
         <div className="ui-card-title"><Icon name="message" size={15} /> Conversation</div>
+        <div className="ui-convo-tools">
+        {[...tenant, ...dispatcher].some((l) => l.translation) && (
+          <button className={`ui-toggle ${subtitles ? "is-on" : ""}`} onClick={() => setSubtitles((v) => !v)} title="English subtitles">
+            <Icon name="languages" size={13} /> EN
+          </button>
+        )}
         <div className="ui-tabs" role="tablist">
           <button role="tab" aria-selected={tab === "tenant"} className={tab === "tenant" ? "is-active" : ""} onClick={() => setPicked("tenant")}>
             Tenant {tenantLive && <span className="ui-live-dot" />}
@@ -606,6 +684,7 @@ function Conversation({ tenant, dispatcher, tenantLive, dispatcherLive, contract
           <button role="tab" aria-selected={tab === "dispatcher"} className={tab === "dispatcher" ? "is-active" : ""} onClick={() => setPicked("dispatcher")}>
             Contractor {dispatcherLive && <span className="ui-live-dot" />}
           </button>
+        </div>
         </div>
       </div>
       <div ref={ref} className="ui-messages">
@@ -622,7 +701,15 @@ function Conversation({ tenant, dispatcher, tenantLive, dispatcherLive, contract
           ) : (
             <div key={l.id} className={`ui-msg ${l.role === "user" ? "is-user" : "is-agent"}`}>
               <div className="ui-msg-who">{l.role === "user" ? who.user : who.agent}</div>
-              <div className="ui-msg-text">{l.text}</div>
+              <div className="ui-msg-text">
+                {l.text}
+                {subtitles && l.translation && (
+                  <div className="ui-translation">
+                    <span className="ui-translation-label"><Icon name="languages" size={12} /> {langName(l.lang)} → English</span>
+                    {l.translation}
+                  </div>
+                )}
+              </div>
             </div>
           ),
         )}
@@ -708,6 +795,7 @@ const ICONS = {
   terminal: "m4 17 6-6-6-6 M12 19h8",
   flame: "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z",
   key: "m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4 M21 2l-9.6 9.6 M15.5 12a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0",
+  languages: "M5 8l6 6 M4 14l6-6 2-3 M2 5h12 M7 2h1 M22 22l-5-10-5 10 M14 18h6",
 } as const;
 type IconName = keyof typeof ICONS;
 
@@ -758,6 +846,16 @@ function offset(ms: number) {
 
 function hhmm(iso: string) {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
+}
+
+const LANG_NAME: Record<string, string> = { nl: "Dutch", de: "German", fr: "French", es: "Spanish", it: "Italian", pt: "Portuguese", tr: "Turkish", ar: "Arabic", pl: "Polish" };
+
+function langName(code: string | null) {
+  return (code && LANG_NAME[code]) || (code ? code.toUpperCase() : "Translated");
+}
+
+function fmtDuration(s: number) {
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
 function cap(s: string) {

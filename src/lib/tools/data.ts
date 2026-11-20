@@ -119,25 +119,26 @@ export async function buildingContext(unit: string, issue: IssueType): Promise<B
   return must(res, "building_context") as BuildingContextRow;
 }
 
-const ISSUE_WORD: Record<IssueType, { en: string; de: string }> = {
-  leak: { en: "leak", de: "Wasserschaden" },
-  heating: { en: "heating", de: "Heizungs" },
-  electrical: { en: "electrical", de: "Elektrik" },
-  lock: { en: "lock", de: "Schloss" },
-  appliance: { en: "appliance", de: "Geräte" },
-  pest: { en: "pest", de: "Schädlings" },
-  other: { en: "similar", de: "ähnliche" },
+const ISSUE_WORD: Record<IssueType, Record<Language, string>> = {
+  leak: { en: "leak", de: "Wasserschaden", nl: "lekkage" },
+  heating: { en: "heating", de: "Heizungs", nl: "verwarmings" },
+  electrical: { en: "electrical", de: "Elektrik", nl: "elektra" },
+  lock: { en: "lock", de: "Schloss", nl: "slot" },
+  appliance: { en: "appliance", de: "Geräte", nl: "apparaat" },
+  pest: { en: "pest", de: "Schädlings", nl: "ongedierte" },
+  other: { en: "similar", de: "ähnliche", nl: "vergelijkbare" },
 };
 
-const TRADE_WORD: Record<Trade, { en: string; de: string }> = {
-  plumber: { en: "plumber", de: "den Installateur" },
-  electrician: { en: "electrician", de: "den Elektriker" },
-  locksmith: { en: "locksmith", de: "den Schlüsseldienst" },
-  handyman: { en: "handyman", de: "den Hausmeisterservice" },
+const TRADE_WORD: Record<Trade, Record<Language, string>> = {
+  plumber: { en: "plumber", de: "den Installateur", nl: "de loodgieter" },
+  electrician: { en: "electrician", de: "den Elektriker", nl: "de elektricien" },
+  locksmith: { en: "locksmith", de: "den Schlüsseldienst", nl: "de slotenmaker" },
+  handyman: { en: "handyman", de: "den Hausmeisterservice", nl: "de klusjesman" },
 };
 
 function ordinal(n: number, lang: Language) {
   if (lang === "de") return `${n}.`;
+  if (lang === "nl") return ["", "eerste", "tweede", "derde", "vierde", "vijfde", "zesde"][n] ?? `${n}e`;
   return ["zeroth", "first", "second", "third", "fourth", "fifth", "sixth"][n] ?? `${n}th`;
 }
 
@@ -147,6 +148,12 @@ function when(days: number, lang: Language) {
     if (days === 1) return "gestern";
     if (days >= 5 && days <= 13) return "letzte Woche";
     return `vor ${days} Tagen`;
+  }
+  if (lang === "nl") {
+    if (days === 0) return "vandaag";
+    if (days === 1) return "gisteren";
+    if (days >= 5 && days <= 13) return "vorige week";
+    return `${days} dagen geleden`;
   }
   if (days === 0) return "today";
   if (days === 1) return "yesterday";
@@ -165,6 +172,14 @@ export function patternNote(ctx: BuildingContextRow, issue: IssueType, trade: Tr
     if (first && ctx.caller_floor !== null) {
       const dir = first.floor > ctx.caller_floor ? "über Ihnen" : "unter Ihnen";
       s += ` ${first.unit} ${dir} hat ${when(first.days_ago, lang)} etwas gemeldet: ${first.summary}. Deshalb schicke ich ${TRADE_WORD[trade].de} zuerst zu ${first.unit}.`;
+    }
+    return s;
+  }
+  if (lang === "nl") {
+    let s = `Dit is al de ${ordinal(count, lang)} ${issueWord}melding in uw stijgleiding deze maand.`;
+    if (first && ctx.caller_floor !== null) {
+      const dir = first.floor > ctx.caller_floor ? "boven u" : "onder u";
+      s += ` ${first.unit} ${dir} meldde ${when(first.days_ago, lang)} ook een probleem, dus ik stuur ${TRADE_WORD[trade].nl} eerst naar ${first.unit}.`;
     }
     return s;
   }

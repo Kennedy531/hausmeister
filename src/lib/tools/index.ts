@@ -16,6 +16,7 @@ import {
   patternNote,
 } from "./data";
 import { dispatchTicket, escalate } from "./dispatch";
+import { notifyNeighbour } from "./neighbour";
 
 const ISSUES: IssueType[] = ["leak", "heating", "electrical", "lock", "appliance", "pest", "other"];
 const URGENCIES: Urgency[] = ["emergency", "urgent", "normal"];
@@ -122,7 +123,9 @@ export const tools: ToolHandlers = {
       to,
       lang === "de"
         ? `Hausmeister: Bitte schicken Sie ein Foto vom Schaden (Ticket #${t.id}): ${link}`
-        : `Hausmeister: please send a photo of the damage (ticket #${t.id}): ${link}`,
+        : lang === "nl"
+          ? `Hausmeister: stuur een foto van de schade (ticket #${t.id}): ${link}`
+          : `Hausmeister: please send a photo of the damage (ticket #${t.id}): ${link}`,
     );
     await ticketEvent(t.id, "photo_link", sms.sent ? "Photo link texted to the tenant" : `Photo link not sent (${sms.error})`);
     return sms.sent
@@ -178,7 +181,9 @@ export const tools: ToolHandlers = {
       visitFirst && t && visitFirst !== t.unit.label
         ? lang === "de"
           ? ` Zuerst schaut er in ${visitFirst} nach der Ursache.`
-          : ` They'll check ${visitFirst} first for the source.`
+          : lang === "nl"
+            ? ` Eerst kijkt hij in ${visitFirst} naar de oorzaak.`
+            : ` They'll check ${visitFirst} first for the source.`
         : "";
     await ticketEvent(ticketId, "booked", `${name} booked for ${formatSlot(res.scheduled_at!, res.ends_at!, "en")}`);
 
@@ -187,11 +192,14 @@ export const tools: ToolHandlers = {
       const body =
         lang === "de"
           ? `Hausmeister: ${name}${company} kommt ${when} zu Ihnen (Ticket #${ticketId}).${firstNote}`
-          : `Hausmeister: ${name}${company} is booked for ${when} at your flat ${t.unit.label} (ticket #${ticketId}).${firstNote}`;
+          : lang === "nl"
+            ? `Hausmeister: ${name}${company} komt ${when} naar uw woning ${t.unit.label} (ticket #${ticketId}).${firstNote}`
+            : `Hausmeister: ${name}${company} is booked for ${when} at your flat ${t.unit.label} (ticket #${ticketId}).${firstNote}`;
       const sms = await sendSms(t.tenant.phone, body);
       smsSent = sms.sent;
       await ticketEvent(ticketId, "sms", sms.sent ? `Tenant texted: "${body}"` : `Tenant SMS not sent (${sms.error}): "${body}"`);
     }
+    if (t) await notifyNeighbour(t, res.scheduled_at!, res.ends_at!);
     return {
       confirmed: true,
       scheduled_at: res.scheduled_at!,
