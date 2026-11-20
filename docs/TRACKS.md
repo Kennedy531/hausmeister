@@ -6,7 +6,7 @@ The full product and demo plan lives in the team doc "Reltix Track — Build & P
 
 | | Track A: Calls | Track B: Data & screens |
 |---|---|---|
-| Who | Kennedy | Teammate (Tadiwa in the plan) |
+| Who | Kennedy | Tadiwa |
 | Branch | `track-a-calls` | `track-b-data` |
 | Owns | Everything a phone call touches: Vapi webhook, both voice agents, outbound dispatcher call | Everything behind and around the call: database, tool logic, pattern rule, SMS, dashboard, photo page |
 | Accounts | Vapi (phone number, ElevenLabs voice, OpenAI model inside Vapi) | Supabase, Twilio, OpenAI API |
@@ -79,7 +79,7 @@ Work in this order. Each step should end with a real phone call that works.
 6. **German**: the agent answers in the tenant's `language`.
 7. **Latency tuning**: short sentences, filler lines before slow tools. Test in the noisy hall.
 
-## Track B: Data & screens (teammate)
+## Track B: Data & screens (Tadiwa)
 
 1. **Database**:
    - create the Supabase project and run `supabase/schema.sql`, `seed.sql`, then `phones.local.sql` (copied from `phones.example.sql`, never committed)
