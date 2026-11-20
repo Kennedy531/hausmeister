@@ -1,36 +1,27 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hausmeister
 
-## Getting Started
+An AI voice caretaker. A tenant calls; before the call ends, the agent has triaged the problem, checked the building's history, booked a contractor by phone and texted the tenant a confirmed slot.
 
-First, run the development server:
+> "Tenants don't want a ticket number. They want the plumber booked."
+
+## Setup
 
 ```bash
+npm install
+cp .env.example .env.local   # fill in the keys (ask your teammate for the shared values)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Database: in the Supabase SQL editor, run `supabase/schema.sql`, then `supabase/seed.sql`, then your own `supabase/phones.local.sql` (copy it from `phones.example.sql` and add real numbers; it is git-ignored).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Layout
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Path | What |
+|---|---|
+| `src/lib/contract.ts` | The 7 tools the voice agents call: names, inputs, outputs |
+| `src/lib/tools/` | Tool implementations (database, pattern rule, SMS, dispatch) |
+| `src/lib/vapi.ts` | Starts the outbound dispatcher call |
+| `src/app/api/vapi/` | Webhook Vapi calls for every tool call |
+| `agents/` | Voice agent prompts and tool definitions |
+| `supabase/` | Schema and demo seed data |
+| `docs/TRACKS.md` | How the work is split between two people |
