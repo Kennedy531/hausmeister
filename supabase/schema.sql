@@ -273,6 +273,20 @@ create policy "dashboard reads tickets" on tickets for select to anon using (tru
 create policy "dashboard reads ticket events" on ticket_events for select to anon using (true);
 create policy "dashboard reads call events" on call_events for select to anon using (true);
 
+-- Explicit table access for the Data API, so this works whether or not the project
+-- grants new tables automatically. RLS above still limits what the browser (anon) sees.
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'grant usage on schema public to service_role';
+    execute 'grant select, insert, update, delete on all tables in schema public to service_role';
+    execute 'grant usage, select on all sequences in schema public to service_role';
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    execute 'grant usage on schema public to anon';
+    execute 'grant select on tickets, ticket_events, call_events to anon';
+  end if;
+end $$;
+
 -- Live dashboard updates.
 alter publication supabase_realtime add table tickets, ticket_events, call_events;
 
