@@ -447,7 +447,9 @@ function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | n
       : ev("dispatch") ? { state: "done", detail: "No pattern" } : {},
     dispatch: ev("dispatch") ? { at: ev("dispatch")!.created_at, detail: ticket?.contractor_name ?? undefined, state: "done" } : {},
     booked: ev("booked") ? { at: ev("booked")!.created_at, detail: ticket?.scheduled_label ?? undefined, state: "done" } : {},
-    sms: smsEvent
+    sms: ev("email")?.message.startsWith("Tenant emailed")
+      ? { at: ev("email")!.created_at, detail: "Confirmation emailed", state: "done" }
+      : smsEvent
       ? smsEvent.message.startsWith("Tenant texted")
         ? { at: smsEvent.created_at, detail: "SMS delivered", state: "done" }
         : { at: smsEvent.created_at, detail: "SMS not configured", state: "warn" }

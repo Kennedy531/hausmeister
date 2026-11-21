@@ -5,6 +5,7 @@ import type { ToolHandlers } from "./types";
 import { TRADE_FOR_ISSUE, type IssueType, type Urgency } from "@/lib/contract";
 import { db, must, ticketEvent } from "@/lib/db";
 import { sendSms } from "@/lib/sms";
+import { bookingEmail, sendEmail, tenantEmailAddress } from "@/lib/email";
 import { formatSlot, formatWindow, startsInWindow } from "@/lib/time";
 import {
   buildingContext,
@@ -183,11 +184,35 @@ export const tools: ToolHandlers = {
       smsSent = sms.sent;
       await ticketEvent(ticketId, "sms", sms.sent ? `Tenant texted: "${body}"` : `Tenant SMS not sent (${sms.error}): "${body}"`);
     }
+
+    // Email confirmation with all the details (works where the SMS trial doesn't).
+    let emailSent = false;
+    const to = tenantEmailAddress();
+    if (t && to) {
+      const mail = bookingEmail({
+        ticketId,
+        tenantName: t.tenant?.name?.split(" ")[0] ?? "there",
+        unit: t.unit.label,
+        building: t.unit.building.name,
+        address: `${t.unit.building.address}, ${t.unit.building.city}`,
+        issueSummary: t.summary,
+        urgency: t.urgency,
+        contractorName: name,
+        contractorCompany: t.contractor?.company ?? null,
+        trade: t.contractor?.trade ?? "contractor",
+        when: formatSlot(res.scheduled_at!, res.ends_at!, "en"),
+        visitFirst: visitFirst ?? null,
+        patternNote: t.pattern_flag ? t.pattern_note : null,
+      });
+      const r = await sendEmail({ to, ...mail });
+      emailSent = r.sent;
+      await ticketEvent(ticketId, "email", r.sent ? `Tenant emailed: "${mail.subject}"` : `Tenant email not sent (${r.error})`);
+    }
     if (t) await notifyNeighbour(t, res.scheduled_at!, res.ends_at!);
     return {
       confirmed: true,
       scheduled_at: res.scheduled_at!,
-      tenant_sms_sent: smsSent,
+      tenant_sms_sent: smsSent || emailSent,
       message: `Booked for ${formatSlot(res.scheduled_at!, res.ends_at!, t?.contractor?.language ?? "en")}. Thank the contractor and end the call.`,
     };
   },
