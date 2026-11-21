@@ -1,6 +1,7 @@
 // Creates or updates both Vapi assistants from agents/, and points the phone number at the webhook.
 //   node scripts/sync-agents.mjs            create/update both assistants + phone number
 //   node scripts/sync-agents.mjs --no-phone leave the phone number alone
+//   node scripts/sync-agents.mjs --only=dispatcher   update just one agent
 // Prints the assistant ids to put in .env.local on first run.
 import { env } from "./env.mjs";
 import { buildAssistants } from "../agents/config.mjs";
@@ -25,7 +26,9 @@ async function vapi(method, path, body) {
 
 const assistants = buildAssistants(env);
 const ids = {};
+const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
 for (const [key, idVar] of [["tenant", "VAPI_TENANT_ASSISTANT_ID"], ["dispatcher", "VAPI_DISPATCHER_ASSISTANT_ID"]]) {
+  if (only && only !== key) continue;
   const existing = env[idVar];
   const a = existing
     ? await vapi("PATCH", `/assistant/${existing}`, assistants[key])

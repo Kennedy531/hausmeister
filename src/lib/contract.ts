@@ -27,7 +27,7 @@ export type TicketStatus =
   | "escalated"
   | "resolved";
 
-export type Language = "en" | "de";
+export type Language = "en" | "de" | "nl";
 
 /** Which trade fixes which kind of issue. */
 export const TRADE_FOR_ISSUE: Record<IssueType, Trade> = {

@@ -24,7 +24,7 @@ insert into tenants (unit_id, name, phone, language) values
   ((select id from units where label = '3A'), 'Aisha Bello',   '+490000000013', 'en');
 
 insert into contractors (name, company, trade, phone, rating, hourly_rate_eur, language) values
-  ('Jan',    'Jan Schulte Sanitär',    'plumber',     '+490000000100', 4.8, 65, 'en'), -- Emmanuel's phone
+  ('Jan',    'Jan Schulte Sanitär',    'plumber',     '+490000000100', 4.8, 65, 'nl'), -- speaks Dutch: the dispatcher calls in Dutch -- Emmanuel's phone
   ('Ingrid', 'Elektro Brandt',         'electrician', '+490000000101', 4.6, 70, 'en'),
   ('Kai',    'Schlüsseldienst Rhein',  'locksmith',   '+490000000102', 4.4, 55, 'en'),
   ('Olu',    'Hausservice Okafor',     'handyman',    '+490000000103', 4.7, 45, 'en'),
