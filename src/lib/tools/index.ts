@@ -4,7 +4,6 @@
 import type { ToolHandlers } from "./types";
 import { TRADE_FOR_ISSUE, type IssueType, type Urgency } from "@/lib/contract";
 import { db, must, ticketEvent } from "@/lib/db";
-import { sendSms } from "@/lib/sms";
 import { bookingEmail, sendEmail, tenantEmailAddress } from "@/lib/email";
 import { formatSlot, formatWindow, startsInWindow } from "@/lib/time";
 import {
@@ -150,41 +149,17 @@ export const tools: ToolHandlers = {
 
     if (!res.ok) {
       if (res.already_booked && res.scheduled_at) {
-        return { confirmed: true, scheduled_at: res.scheduled_at, tenant_sms_sent: true, message: "Already booked, the tenant has been texted." };
+        return { confirmed: true, scheduled_at: res.scheduled_at, tenant_sms_sent: true, message: "Already booked, the tenant has the details." };
       }
       return { confirmed: false, scheduled_at: "", tenant_sms_sent: false, message: res.reason ?? "Could not book that slot." };
     }
 
     const t = await getTicket(ticketId);
     const name = t?.contractor?.name ?? "The contractor";
-    const company = t?.contractor?.company ? ` (${t.contractor.company})` : "";
-    const lang = t?.tenant?.language ?? "en";
-    const when = formatSlot(res.scheduled_at!, res.ends_at!, lang);
     const visitFirst = t?.visit_unit?.label;
-    const firstNote =
-      visitFirst && t && visitFirst !== t.unit.label
-        ? lang === "de"
-          ? ` Zuerst schaut er in ${visitFirst} nach der Ursache.`
-          : lang === "nl"
-            ? ` Eerst kijkt hij in ${visitFirst} naar de oorzaak.`
-            : ` They'll check ${visitFirst} first for the source.`
-        : "";
     await ticketEvent(ticketId, "booked", `${name} booked for ${formatSlot(res.scheduled_at!, res.ends_at!, "en")}`);
 
-    let smsSent = false;
-    if (t?.tenant) {
-      const body =
-        lang === "de"
-          ? `Hausmeister: ${name}${company} kommt ${when} zu Ihnen (Ticket #${ticketId}).${firstNote}`
-          : lang === "nl"
-            ? `Hausmeister: ${name}${company} komt ${when} naar uw woning ${t.unit.label} (ticket #${ticketId}).${firstNote}`
-            : `Hausmeister: ${name}${company} is booked for ${when} at your flat ${t.unit.label} (ticket #${ticketId}).${firstNote}`;
-      const sms = await sendSms(t.tenant.phone, body);
-      smsSent = sms.sent;
-      await ticketEvent(ticketId, "sms", sms.sent ? `Tenant texted: "${body}"` : `Tenant SMS not sent (${sms.error}): "${body}"`);
-    }
-
-    // Email confirmation with all the details (works where the SMS trial doesn't).
+    // The tenant is told by email (texts are off for the demo).
     let emailSent = false;
     const to = tenantEmailAddress();
     if (t && to) {
@@ -210,7 +185,7 @@ export const tools: ToolHandlers = {
     return {
       confirmed: true,
       scheduled_at: res.scheduled_at!,
-      tenant_sms_sent: smsSent || emailSent,
+      tenant_sms_sent: emailSent,
       message: `Booked for ${formatSlot(res.scheduled_at!, res.ends_at!, t?.contractor?.language ?? "en")}. Thank the contractor and end the call.`,
     };
   },

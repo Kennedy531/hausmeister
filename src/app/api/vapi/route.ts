@@ -79,7 +79,7 @@ function describe(name: string, out: unknown): string {
     case "dispatch_contractor":
       return o.started ? `Calling ${o.contractor_name}` : `Not dispatched: ${short(String(o.message ?? "").split(". ")[0], 90)}`;
     case "confirm_slot":
-      return o.confirmed ? `Slot booked${o.tenant_sms_sent ? ", tenant texted" : ""}` : `Not booked: ${short(o.message, 90)}`;
+      return o.confirmed ? `Slot booked${o.tenant_sms_sent ? ", tenant emailed" : ""}` : `Not booked: ${short(o.message, 90)}`;
     default:
       return short(out);
   }

@@ -429,7 +429,6 @@ const ACTIVITY = [
 function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | null; tenantLines: CallEvent[]; startedAt: string | null; live: boolean }) {
   const ev = (k: string) => ticket?.events.find((e) => e.kind === k);
   const historyLine = tenantLines.find((l) => l.role === "tool" && l.text.startsWith("get_building_context"));
-  const smsEvent = ticket?.events.find((e) => e.kind === "sms" && /tenant/i.test(e.message));
   const steps: Record<string, { at?: string; detail?: string; state?: "done" | "warn" | "skip" }> = {
     call: tenantLines[0] || ticket
       ? { at: tenantLines[0]?.created_at ?? ticket?.call_started_at ?? undefined, detail: ticket?.tenant_name ? `${ticket.tenant_name} · ${ticket.unit}` : undefined, state: "done" }
@@ -447,10 +446,6 @@ function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | n
     booked: ev("booked") ? { at: ev("booked")!.created_at, detail: ticket?.scheduled_label ?? undefined, state: "done" } : {},
     sms: ev("email")?.message.startsWith("Tenant emailed")
       ? { at: ev("email")!.created_at, detail: "Confirmation emailed", state: "done" }
-      : smsEvent
-      ? smsEvent.message.startsWith("Tenant texted")
-        ? { at: smsEvent.created_at, detail: "SMS delivered", state: "done" }
-        : { at: smsEvent.created_at, detail: "SMS not configured", state: "warn" }
       : {},
   };
   const firstOpen = ACTIVITY.findIndex((a) => !steps[a.key].state);
