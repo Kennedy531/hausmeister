@@ -44,11 +44,18 @@ export function buildAssistants(env) {
     url: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/api/vapi`,
     headers: { "X-Vapi-Secret": env.VAPI_WEBHOOK_SECRET },
   };
-  const voice = {
+  // Turbo v2.5 sounds far more natural than Flash and is still fast enough for phone calls.
+  // Lower stability = more expressive, less monotone; speaker boost keeps it close to the original voice.
+  const voiceFor = (voiceId) => ({
     provider: "11labs",
-    voiceId: env.ELEVENLABS_VOICE_ID,
-    model: env.ELEVENLABS_MODEL || "eleven_flash_v2_5",
-  };
+    voiceId,
+    model: env.ELEVENLABS_MODEL || "eleven_turbo_v2_5",
+    stability: 0.4,
+    similarityBoost: 0.8,
+    useSpeakerBoost: true,
+  });
+  const tenantVoice = voiceFor(env.ELEVENLABS_VOICE_ID);
+  const dispatcherVoice = voiceFor(env.ELEVENLABS_DISPATCHER_VOICE_ID || env.ELEVENLABS_VOICE_ID);
   const model = (prompt, tools) => ({
     provider: "openai",
     model: env.VAPI_MODEL || "gpt-4.1-mini",
@@ -65,7 +72,7 @@ export function buildAssistants(env) {
       firstMessage:
         "{{ first_message | default: 'Hello, this is Hausmeister, your building caretaker. How can I help?' }}",
       model: model(read("./tenant/prompt.md"), tenantTools),
-      voice,
+      voice: tenantVoice,
       transcriber,
       server,
       serverMessages,
@@ -76,7 +83,7 @@ export function buildAssistants(env) {
       firstMessage:
         "{% if language == 'de' %}Hallo {{ contractor_name }}, hier ist Hausmeister mit einem Auftrag in {{ building }}. Haben Sie kurz Zeit?{% elsif language == 'nl' %}Hoi {{ contractor_name }}, met Hausmeister. Ik bel over een klus in {{ building }}. Heeft u even?{% else %}Hi {{ contractor_name }}, this is Hausmeister calling about a job at {{ building }}. Have you got a moment?{% endif %}",
       model: model(read("./dispatcher/prompt.md"), dispatcherTools),
-      voice,
+      voice: dispatcherVoice,
       transcriber,
       server,
       serverMessages,
