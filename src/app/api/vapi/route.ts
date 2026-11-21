@@ -81,7 +81,7 @@ function describe(name: string, out: unknown): string {
       return o.pattern ? `Pattern found: ${n} similar reports in the stack, visit ${o.visit_first} first` : "No pattern in the building history";
     }
     case "dispatch_contractor":
-      return o.started ? `Calling ${o.contractor_name}` : `Not dispatched: ${short(o.message, 90)}`;
+      return o.started ? `Calling ${o.contractor_name}` : `Not dispatched: ${short(String(o.message ?? "").split(". ")[0], 90)}`;
     case "confirm_slot":
       return o.confirmed ? `Slot booked${o.tenant_sms_sent ? ", tenant texted" : ""}` : `Not booked: ${short(o.message, 90)}`;
     default:

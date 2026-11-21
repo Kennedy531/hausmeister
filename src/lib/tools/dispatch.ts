@@ -3,6 +3,7 @@ import { callEvent, db, must, ticketEvent } from "@/lib/db";
 import { sendSms } from "@/lib/sms";
 import { startDispatcherCall } from "@/lib/vapi";
 import { TRADE_FOR_ISSUE, type Trade } from "@/lib/contract";
+import { clock, formatWindow, localToday, startsInWindow } from "@/lib/time";
 import { getTicket, type Contractor, type TicketFull } from "./data";
 
 /** After this many contractor calls without a booking, a human takes over. */
@@ -12,33 +13,74 @@ export type DispatchResult =
   | { started: true; contractor: Contractor; callId: string }
   | { started: false; reason: string };
 
+/** When the tenant is home. Both ends optional; ISO times. */
+export interface Window {
+  from: string | null;
+  until: string | null;
+}
+
+/**
+ * Turns the agent's "HH:MM" answers into a window for today. "until" earlier than "from"
+ * (e.g. 22:00 to 00:30) runs past midnight. A start in the past means "from now".
+ */
+export function windowFrom(fromHHMM?: string, untilHHMM?: string): Window {
+  const now = Date.now();
+  let from = localToday(fromHHMM);
+  let until = localToday(untilHHMM);
+  if (from && from.getTime() < now) from = null;
+  if (until && from && until <= from) until = new Date(until.getTime() + 86400e3);
+  if (until && until.getTime() <= now) until = null;
+  return { from: from?.toISOString() ?? null, until: until?.toISOString() ?? null };
+}
+
 interface FreeSlot {
   id: number;
   starts_at: string;
   ends_at: string;
 }
 
-async function pickContractor(trade: Trade, exclude: number[]) {
+async function pickContractor(trade: Trade, exclude: number[], win: Window) {
   const contractors = must(
     await db().from("contractors").select("id, name, company, trade, phone, rating, language").eq("trade", trade).order("rating", { ascending: false }),
     "contractors",
   ) as Contractor[];
   for (const c of contractors) {
     if (exclude.map(Number).includes(Number(c.id))) continue;
-    const slots = must(
+    const free = must(
       await db()
         .from("contractor_slots")
         .select("id, starts_at, ends_at")
         .eq("contractor_id", c.id)
         .eq("booked", false)
         .gt("starts_at", new Date().toISOString())
-        .order("starts_at")
-        .limit(2),
+        .order("starts_at"),
       "slots",
     ) as FreeSlot[];
-    if (slots.length) return { contractor: c, slots };
+    // Only slots that overlap the time the tenant is home.
+    const fits = free.filter((s) => startsInWindow(s.starts_at, win.from, win.until));
+    if (fits.length) return { contractor: c, slots: fits.slice(0, 2) };
   }
   return null;
+}
+
+/** The earliest free slot of any contractor for the trade, ignoring the tenant's window. */
+async function earliestSlot(trade: Trade, exclude: number[]) {
+  const ids = (must(await db().from("contractors").select("id").eq("trade", trade), "contractors") as { id: number }[])
+    .map((c) => Number(c.id))
+    .filter((id) => !exclude.map(Number).includes(id));
+  if (!ids.length) return null;
+  const rows = must(
+    await db()
+      .from("contractor_slots")
+      .select("id, starts_at, ends_at")
+      .in("contractor_id", ids)
+      .eq("booked", false)
+      .gt("starts_at", new Date().toISOString())
+      .order("starts_at")
+      .limit(1),
+    "earliest slot",
+  ) as FreeSlot[];
+  return rows[0] ?? null;
 }
 
 /**
@@ -57,7 +99,7 @@ export function guard(t: TicketFull | null): string | null {
 }
 
 /** Calls the best-rated free contractor for the ticket. Used by the tool, the dashboard backup button and retries. */
-export async function dispatchTicket(ticketId: number, opts: { retry?: boolean } = {}): Promise<DispatchResult> {
+export async function dispatchTicket(ticketId: number, opts: { retry?: boolean; window?: Window } = {}): Promise<DispatchResult> {
   const t = await getTicket(ticketId);
   if (!opts.retry) {
     const refusal = guard(t);
@@ -67,7 +109,25 @@ export async function dispatchTicket(ticketId: number, opts: { retry?: boolean }
 
   // The trade always follows the ticket's issue type, whatever the agent asked for.
   const trade = TRADE_FOR_ISSUE[t.issue_type];
-  const pick = await pickContractor(trade, t.tried_contractor_ids ?? []);
+  // A new window from the agent wins; a retry reuses the one stored on the ticket.
+  const win: Window = opts.window ?? { from: t.available_from ?? null, until: t.available_until ?? null };
+  if (opts.window) {
+    const { error } = await db().from("tickets").update({ available_from: win.from, available_until: win.until }).eq("id", t.id);
+    if (error) console.error("storing the tenant's window failed (run supabase/migrations/002?)", error.message);
+  }
+  const pick = await pickContractor(trade, t.tried_contractor_ids ?? [], win);
+  if (!pick && (win.from || win.until)) {
+    // Nobody fits the tenant's window: offer the earliest time instead of escalating.
+    const next = await earliestSlot(trade, t.tried_contractor_ids ?? []);
+    if (next) {
+      const lang = t.tenant?.language ?? "en";
+      await ticketEvent(t.id, "window", `No ${trade} slot while the tenant is home (${formatWindow(win.from, win.until)}); earliest ${clock(next.starts_at)}`);
+      return {
+        started: false,
+        reason: `No ${trade} has a slot while the tenant is home (${formatWindow(win.from, win.until)}). The earliest free time today is ${clock(next.starts_at, lang)} to ${clock(next.ends_at, lang)}. Ask the tenant if that works; if yes, call dispatch_contractor again with available_from ${clock(next.starts_at)}.`,
+      };
+    }
+  }
   if (!pick) {
     await escalate(t, `No ${trade} with a free slot today.`);
     return { started: false, reason: `No ${trade} has a free slot today. The property manager has been asked to call the tenant back.` };
@@ -102,6 +162,7 @@ export async function dispatchTicket(ticketId: number, opts: { retry?: boolean }
       urgency: t.urgency,
       issueSummary: t.summary,
       patternNote: t.pattern_note ?? "",
+      tenantWindow: formatWindow(win.from, win.until, pick.contractor.language),
       slots: pick.slots.map((s) => ({ id: s.id, startsAt: s.starts_at, endsAt: s.ends_at })),
     });
     await db().from("tickets").update({ dispatcher_call_id: callId }).eq("id", t.id);
@@ -109,7 +170,7 @@ export async function dispatchTicket(ticketId: number, opts: { retry?: boolean }
     await ticketEvent(
       t.id,
       "dispatch",
-      `Calling ${pick.contractor.name} (${pick.contractor.company ?? trade}, ★${pick.contractor.rating})${opts.retry ? " — previous contractor didn't book" : ""}`,
+      `Calling ${pick.contractor.name} (${pick.contractor.company ?? trade}, ★${pick.contractor.rating})${win.from || win.until ? `, slots for the tenant's window ${formatWindow(win.from, win.until)}` : ""}${opts.retry ? " — previous contractor didn't book" : ""}`,
     );
     return { started: true, contractor: pick.contractor, callId };
   } catch (e) {

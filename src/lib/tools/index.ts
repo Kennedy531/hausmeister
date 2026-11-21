@@ -5,7 +5,7 @@ import type { ToolHandlers } from "./types";
 import { TRADE_FOR_ISSUE, type IssueType, type Urgency } from "@/lib/contract";
 import { db, must, ticketEvent } from "@/lib/db";
 import { sendSms } from "@/lib/sms";
-import { formatSlot } from "@/lib/time";
+import { formatSlot, formatWindow, startsInWindow } from "@/lib/time";
 import {
   buildingContext,
   cleanUnitLabel,
@@ -15,7 +15,7 @@ import {
   getTicketByCall,
   patternNote,
 } from "./data";
-import { dispatchTicket, escalate } from "./dispatch";
+import { dispatchTicket, escalate, windowFrom } from "./dispatch";
 import { notifyNeighbour } from "./neighbour";
 
 const ISSUES: IssueType[] = ["leak", "heating", "electrical", "lock", "appliance", "pest", "other"];
@@ -148,7 +148,10 @@ export const tools: ToolHandlers = {
   },
 
   async dispatch_contractor(input) {
-    const r = await dispatchTicket(asId(input.ticket_id));
+    const hasWindow = Boolean(input.available_from || input.available_until);
+    const r = await dispatchTicket(asId(input.ticket_id), {
+      window: hasWindow ? windowFrom(input.available_from, input.available_until) : undefined,
+    });
     if (!r.started) return { started: false, contractor_name: "", message: r.reason };
     return {
       started: true,
@@ -159,6 +162,23 @@ export const tools: ToolHandlers = {
 
   async confirm_slot(input) {
     const ticketId = asId(input.ticket_id);
+    // Never book a time the tenant said they're not home, even if the slot is free.
+    const before = await getTicket(ticketId);
+    if (before && (before.available_from || before.available_until)) {
+      const slot = must(
+        await db().from("contractor_slots").select("starts_at, ends_at").eq("id", asId(input.slot_id)).maybeSingle(),
+        "slot",
+      ) as { starts_at: string; ends_at: string } | null;
+      const fits = slot && startsInWindow(slot.starts_at, before.available_from, before.available_until);
+      if (slot && !fits) {
+        return {
+          confirmed: false,
+          scheduled_at: "",
+          tenant_sms_sent: false,
+          message: `The tenant isn't home then (${formatWindow(before.available_from ?? null, before.available_until ?? null)}). Offer only the listed slots.`,
+        };
+      }
+    }
     const res = must(
       await db().rpc("book_slot", { p_ticket: ticketId, p_slot: asId(input.slot_id) }),
       "book slot",

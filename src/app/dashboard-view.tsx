@@ -8,7 +8,7 @@ interface Event { id: number; kind: string; message: string; created_at: string 
 interface Ticket {
   id: number; unit: string; stack: string; visit_first: string | null; issue_type: string; urgency: string; status: string;
   summary: string; pattern_flag: boolean; pattern_note: string | null; photo_url: string | null; photo_assessment: string | null;
-  photo_safety_advice: string | null; contractor_name: string | null; contractor_company: string | null; contractor_rating: number | null; contractor_language: string | null;
+  photo_safety_advice: string | null; contractor_name: string | null; contractor_company: string | null; contractor_rating: number | null; contractor_language: string | null; tenant_window: string | null;
   tenant_name: string | null; scheduled_label: string | null; call_started_at: string | null; booked_at: string | null;
   created_at: string; seed: boolean; tenant_call_id: string | null; dispatcher_call_id: string | null; dispatch_attempts: number;
   escalation_reason: string | null; events: Event[];
@@ -512,7 +512,10 @@ function ContractorRow({ ticket }: { ticket: Ticket }) {
           {ticket.contractor_name}
           {ticket.contractor_rating && <span className="ui-subtle"> · ★ {ticket.contractor_rating}</span>}
         </div>
-        <div className="ui-subtle">{ticket.contractor_company}</div>
+        <div className="ui-subtle">
+          {ticket.contractor_company}
+          {ticket.tenant_window && !booked && <> · tenant home {ticket.tenant_window}</>}
+        </div>
       </div>
       <div className="ui-contractor-state">
         {booked ? (
@@ -593,6 +596,7 @@ function Details({ ticket, rule }: { ticket: Ticket; rule?: { responsible: strin
       <dt>Urgency</dt><dd><Urgency value={ticket.urgency} /></dd>
       <dt>Issue</dt><dd>{cap(ticket.issue_type)}</dd>
       <dt>Apartment</dt><dd>{ticket.unit} <span className="ui-subtle">· stack {ticket.stack}</span></dd>
+      {ticket.tenant_window && (<><dt>Tenant home</dt><dd>{cap(ticket.tenant_window)}</dd></>)}
       {ticket.visit_first && ticket.visit_first !== ticket.unit && (<><dt>Visit first</dt><dd>{ticket.visit_first}</dd></>)}
       {ticket.dispatch_attempts > 1 && (<><dt>Contractors tried</dt><dd>{ticket.dispatch_attempts}</dd></>)}
       {rule && (

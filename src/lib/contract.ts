@@ -119,6 +119,9 @@ export type CheckPhotoOutput =
 export interface DispatchContractorInput {
   ticket_id: number;
   trade: Trade;
+  /** "When are you home today?" as local 24-hour times, e.g. "18:00". Leave out for "any time". */
+  available_from?: string;
+  available_until?: string;
 }
 export interface DispatchContractorOutput {
   started: boolean;
