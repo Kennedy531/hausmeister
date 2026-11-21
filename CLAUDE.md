@@ -4,7 +4,7 @@
 
 An AI voice caretaker for the Reltix hackathon track. A tenant calls, the agent triages the problem, spots repeat issues in the building, books a contractor by phone and texts the tenant the slot.
 
-Stack: Next.js 16 (App Router, `src/`), Supabase, Vapi (with an ElevenLabs voice and an OpenAI model), Twilio SMS, OpenAI vision.
+Stack: Next.js 16 (App Router, `src/`), Supabase, Vapi (with an ElevenLabs voice and an OpenAI model), Twilio SMS (off for the demo), OpenAI (live subtitles).
 
 ## Two people build this in parallel
 

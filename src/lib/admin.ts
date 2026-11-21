@@ -1,4 +1,4 @@
-// Guards the dashboard's demo buttons (reset, backup dispatch, simulated photo).
+// Guards the dashboard's demo buttons (reset, backup dispatch).
 import type { NextRequest } from "next/server";
 
 /** True if the request carries DASHBOARD_ADMIN_KEY (header x-admin-key or ?key=). Open in dev when no key is set. */

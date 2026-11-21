@@ -21,8 +21,6 @@ export const tenantTools = [
     unit: UNIT, issue_type: ISSUE, urgency: URGENCY,
     summary: { type: "string", description: "One sentence in English describing the problem" },
   }, ["unit", "issue_type", "urgency", "summary"]),
-  // send_photo_link / check_photo are switched off for the demo: the photo link goes out by SMS,
-  // and the Twilio trial can't text Dutch numbers. The tools still exist; add them back here to re-enable.
   fn("dispatch_contractor", "Phone the best available contractor for this ticket, offering only slots when the tenant is home. The tenant call can end after this.", {
     ticket_id: TICKET,
     trade: TRADE,
