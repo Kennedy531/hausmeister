@@ -72,10 +72,6 @@ function describe(name: string, out: unknown): string {
       return o.found ? `Caller ID matched ${o.tenant_name}, apartment ${o.unit}` : "Caller ID not on file";
     case "create_ticket":
       return `Ticket #${o.ticket_id} created`;
-    case "send_photo_link":
-      return o.sent ? "Photo link texted to the tenant" : "Photo link could not be sent";
-    case "check_photo":
-      return o.uploaded ? "Photo analysed by the vision model" : "Photo not uploaded yet";
     case "get_building_context": {
       const n = Array.isArray(o.similar_recent) ? o.similar_recent.length : 0;
       return o.pattern ? `Pattern found: ${n} similar reports in the stack, visit ${o.visit_first} first` : "No pattern in the building history";

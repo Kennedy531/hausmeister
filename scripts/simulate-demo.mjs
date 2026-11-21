@@ -51,16 +51,7 @@ await wait(3);
 await say(tenantCall, "user", "Still dripping, and it's right next to the ceiling light.");
 await wait(1);
 const ticket = await tool(tenantCall, "create_ticket", { unit, issue_type: "leak", urgency: "urgent", summary: "Water dripping from the ceiling next to the light fixture" });
-await say(tenantCall, "assistant", "Please don't touch the light. I've just texted you a link. Could you snap a quick photo?");
-
-console.log("3. It looks at the damage");
-await tool(tenantCall, "send_photo_link", { ticket_id: ticket.ticket_id });
-await wait(4);
-await fetch(`${base}/api/photo/${ticket.ticket_id}?simulate=1`, { method: "POST", headers: { "X-Admin-Key": env.DASHBOARD_ADMIN_KEY ?? "" } });
-await say(tenantCall, "user", "Okay, sent.");
-const photo = await tool(tenantCall, "check_photo", { ticket_id: ticket.ticket_id });
-if (photo.uploaded) await say(tenantCall, "assistant", `${photo.assessment} ${photo.safety_advice}`);
-await wait(3);
+await say(tenantCall, "assistant", "Please don't touch the light.");
 
 console.log("4. The context moment");
 const ctx = await tool(tenantCall, "get_building_context", { unit, issue_type: "leak" });

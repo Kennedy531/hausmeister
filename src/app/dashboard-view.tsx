@@ -7,8 +7,8 @@ import { createClient } from "@supabase/supabase-js";
 interface Event { id: number; kind: string; message: string; created_at: string }
 interface Ticket {
   id: number; unit: string; stack: string; visit_first: string | null; issue_type: string; urgency: string; status: string;
-  summary: string; pattern_flag: boolean; pattern_note: string | null; photo_url: string | null; photo_assessment: string | null;
-  photo_safety_advice: string | null; contractor_name: string | null; contractor_company: string | null; contractor_rating: number | null; contractor_language: string | null; tenant_window: string | null;
+  summary: string; pattern_flag: boolean; pattern_note: string | null; 
+  contractor_name: string | null; contractor_company: string | null; contractor_rating: number | null; contractor_language: string | null; tenant_window: string | null;
   tenant_name: string | null; scheduled_label: string | null; call_started_at: string | null; booked_at: string | null;
   created_at: string; seed: boolean; tenant_call_id: string | null; dispatcher_call_id: string | null; dispatch_attempts: number;
   escalation_reason: string | null; events: Event[];
@@ -309,24 +309,6 @@ export default function DashboardView() {
             <Card title="Details" icon="ticket">
               {ticket ? <Details ticket={ticket} rule={state.lease_rules.find((r) => r.issue_type === ticket.issue_type)} /> : <Empty icon="ticket" text="No ticket yet." />}
             </Card>
-            {(ticket?.photo_url || ticket?.photo_assessment) && (
-              <Card title="Photo assessment" icon="camera">
-                <div className="ui-photo">
-                  {ticket.photo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-                    <img src={ticket.photo_url} alt="Tenant's photo of the damage" />
-                  ) : (
-                    <div className="ui-photo-ph"><Icon name="camera" size={20} /></div>
-                  )}
-                  <div>
-                    <p>{ticket.photo_assessment}</p>
-                    {ticket.photo_safety_advice && (
-                      <p className="ui-advice"><Icon name="zap" size={13} /> {ticket.photo_safety_advice}</p>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            )}
           </div>
 
           <Conversation
@@ -439,7 +421,6 @@ function Timer({ elapsed, running, done }: { elapsed: number; running: boolean; 
 const ACTIVITY = [
   { key: "call", label: "Caller identified", icon: "phone" },
   { key: "created", label: "Ticket created", icon: "ticket" },
-  { key: "photo", label: "Photo assessed", icon: "camera" },
   { key: "pattern", label: "Building history checked", icon: "history" },
   { key: "dispatch", label: "Contractor called", icon: "phone" },
   { key: "booked", label: "Slot booked", icon: "calendar" },
@@ -456,9 +437,6 @@ function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | n
       ? { at: tenantLines[0]?.created_at ?? ticket?.call_started_at ?? undefined, detail: ticket?.tenant_name ? `${ticket.tenant_name} · ${ticket.unit}` : undefined, state: "done" }
       : {},
     created: ev("created") ? { at: ev("created")!.created_at, detail: ticket ? `${cap(ticket.urgency)} ${ticket.issue_type}` : undefined, state: "done" } : {},
-    photo: ev("photo")
-      ? { at: ev("photo")!.created_at, detail: "Vision model", state: "done" }
-      : ticket && (ev("dispatch") || ev("pattern")) ? { state: "skip", detail: "Not needed" } : {},
     // When the agent asked for the history (its tool call), not when the ticket stored the pattern.
     pattern: historyLine || ev("pattern")
       ? {
@@ -469,7 +447,9 @@ function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | n
       : ev("dispatch") ? { state: "done", detail: "No pattern" } : {},
     dispatch: ev("dispatch") ? { at: ev("dispatch")!.created_at, detail: ticket?.contractor_name ?? undefined, state: "done" } : {},
     booked: ev("booked") ? { at: ev("booked")!.created_at, detail: ticket?.scheduled_label ?? undefined, state: "done" } : {},
-    sms: smsEvent
+    sms: ev("email")?.message.startsWith("Tenant emailed")
+      ? { at: ev("email")!.created_at, detail: "Confirmation emailed", state: "done" }
+      : smsEvent
       ? smsEvent.message.startsWith("Tenant texted")
         ? { at: smsEvent.created_at, detail: "SMS delivered", state: "done" }
         : { at: smsEvent.created_at, detail: "SMS not configured", state: "warn" }
@@ -831,8 +811,6 @@ const TOOL_LABEL: Record<string, string> = {
   lookup_tenant: "Caller ID checked",
   get_building_context: "Building history checked",
   create_ticket: "Ticket created",
-  send_photo_link: "Photo link texted",
-  check_photo: "Photo checked",
   dispatch_contractor: "Contractor dispatched",
   confirm_slot: "Slot booked",
 };

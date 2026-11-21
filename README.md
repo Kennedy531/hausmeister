@@ -4,7 +4,7 @@ An AI voice caretaker. A tenant calls; before the call ends, the agent has triag
 
 > "Tenants don't want a ticket number. They want the plumber booked."
 
-> **Current status, accounts and the morning checklist:** [`docs/STATUS.md`](docs/STATUS.md)
+> **Current status, accounts and the morning checklist:** [`docs/STATUS.md`](docs/STATUS.md) · **Live demo script:** [`docs/DEMO.md`](docs/DEMO.md)
 
 ## Setup
 
@@ -39,7 +39,6 @@ Without Twilio or Vapi keys, SMS and the outbound call are logged instead of sen
 | `src/lib/vapi.ts` | Starts the outbound dispatcher call |
 | `src/app/api/vapi/` | Webhook for both agents: caller-ID match, tool calls, live transcript, call-ended fallback |
 | `src/app/page.tsx` | Big-screen dashboard: timer, steps, building stack, ticket, live transcript |
-| `src/app/photo/` + `api/photo/` | Tenant photo page and vision assessment |
 | `src/app/api/demo/` | Reset and backup dispatch (need `DASHBOARD_ADMIN_KEY`) |
 | `agents/` | Voice agent prompts and tool definitions (pushed with `scripts/sync-agents.mjs`) |
 | `supabase/` | Schema (incl. pattern rule, slot booking and reset as SQL functions) and demo seed data |

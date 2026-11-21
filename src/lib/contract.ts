@@ -87,33 +87,6 @@ export interface CreateTicketOutput {
 }
 
 // ---------------------------------------------------------------------------
-// send_photo_link: tenant agent. Texts the caller a link to upload a photo.
-// ---------------------------------------------------------------------------
-export interface SendPhotoLinkInput {
-  ticket_id: number;
-}
-export interface SendPhotoLinkOutput {
-  sent: boolean;
-  message: string;
-}
-
-// ---------------------------------------------------------------------------
-// check_photo: tenant agent. Polled after the tenant says they've uploaded.
-// ---------------------------------------------------------------------------
-export interface CheckPhotoInput {
-  ticket_id: number;
-}
-export type CheckPhotoOutput =
-  | {
-      uploaded: true;
-      assessment: string;
-      urgency: Urgency;
-      /** Safety instruction for the tenant, e.g. "switch off that circuit". */
-      safety_advice: string;
-    }
-  | { uploaded: false; message: string };
-
-// ---------------------------------------------------------------------------
 // dispatch_contractor: tenant agent. Starts the outbound dispatcher call.
 // ---------------------------------------------------------------------------
 export interface DispatchContractorInput {
@@ -149,8 +122,6 @@ export interface ToolContract {
   lookup_tenant: { input: LookupTenantInput; output: LookupTenantOutput };
   get_building_context: { input: GetBuildingContextInput; output: GetBuildingContextOutput };
   create_ticket: { input: CreateTicketInput; output: CreateTicketOutput };
-  send_photo_link: { input: SendPhotoLinkInput; output: SendPhotoLinkOutput };
-  check_photo: { input: CheckPhotoInput; output: CheckPhotoOutput };
   dispatch_contractor: { input: DispatchContractorInput; output: DispatchContractorOutput };
   confirm_slot: { input: ConfirmSlotInput; output: ConfirmSlotOutput };
 }

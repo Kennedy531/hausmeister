@@ -21,8 +21,6 @@ export const tenantTools = [
     unit: UNIT, issue_type: ISSUE, urgency: URGENCY,
     summary: { type: "string", description: "One sentence in English describing the problem" },
   }, ["unit", "issue_type", "urgency", "summary"]),
-  fn("send_photo_link", "Text the tenant a link to upload a photo of the damage.", { ticket_id: TICKET }, ["ticket_id"]),
-  fn("check_photo", "Check whether the tenant's photo has arrived and get the assessment.", { ticket_id: TICKET }, ["ticket_id"]),
   fn("dispatch_contractor", "Phone the best available contractor for this ticket, offering only slots when the tenant is home. The tenant call can end after this.", {
     ticket_id: TICKET,
     trade: TRADE,

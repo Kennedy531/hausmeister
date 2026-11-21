@@ -5,6 +5,7 @@ import type { ToolHandlers } from "./types";
 import { TRADE_FOR_ISSUE, type IssueType, type Urgency } from "@/lib/contract";
 import { db, must, ticketEvent } from "@/lib/db";
 import { sendSms } from "@/lib/sms";
+import { bookingEmail, sendEmail, tenantEmailAddress } from "@/lib/email";
 import { formatSlot, formatWindow, startsInWindow } from "@/lib/time";
 import {
   buildingContext,
@@ -111,42 +112,6 @@ export const tools: ToolHandlers = {
     return { ticket_id: row.id, pattern: c.pattern, visit_first: c.visit_first ?? unit.label };
   },
 
-  async send_photo_link(input, ctx) {
-    const t = await getTicket(asId(input.ticket_id));
-    if (!t) return { sent: false, message: "No ticket with that number." };
-    const to = t.tenant?.phone ?? ctx.callerPhone;
-    if (!to) return { sent: false, message: "No phone number to text." };
-    const base = (process.env.PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
-    const lang = t.tenant?.language ?? "en";
-    const link = `${base}/photo/${t.id}`;
-    const sms = await sendSms(
-      to,
-      lang === "de"
-        ? `Hausmeister: Bitte schicken Sie ein Foto vom Schaden (Ticket #${t.id}): ${link}`
-        : lang === "nl"
-          ? `Hausmeister: stuur een foto van de schade (ticket #${t.id}): ${link}`
-          : `Hausmeister: please send a photo of the damage (ticket #${t.id}): ${link}`,
-    );
-    await ticketEvent(t.id, "photo_link", sms.sent ? "Photo link texted to the tenant" : `Photo link not sent (${sms.error})`);
-    return sms.sent
-      ? { sent: true, message: "Photo link sent by SMS. Ask the tenant to tap it and take a photo, then check_photo." }
-      : { sent: false, message: "The text could not be sent. Skip the photo and carry on." };
-  },
-
-  async check_photo(input) {
-    const t = await getTicket(asId(input.ticket_id));
-    if (!t) return { uploaded: false, message: "No ticket with that number." };
-    if (!t.photo_assessment) {
-      return { uploaded: false, message: "Not uploaded yet. Ask the tenant if they've sent it, wait a moment, then check again once." };
-    }
-    return {
-      uploaded: true,
-      assessment: t.photo_assessment,
-      urgency: t.urgency,
-      safety_advice: t.photo_safety_advice ?? "",
-    };
-  },
-
   async dispatch_contractor(input) {
     const hasWindow = Boolean(input.available_from || input.available_until);
     const r = await dispatchTicket(asId(input.ticket_id), {
@@ -219,11 +184,35 @@ export const tools: ToolHandlers = {
       smsSent = sms.sent;
       await ticketEvent(ticketId, "sms", sms.sent ? `Tenant texted: "${body}"` : `Tenant SMS not sent (${sms.error}): "${body}"`);
     }
+
+    // Email confirmation with all the details (works where the SMS trial doesn't).
+    let emailSent = false;
+    const to = tenantEmailAddress();
+    if (t && to) {
+      const mail = bookingEmail({
+        ticketId,
+        tenantName: t.tenant?.name?.split(" ")[0] ?? "there",
+        unit: t.unit.label,
+        building: t.unit.building.name,
+        address: `${t.unit.building.address}, ${t.unit.building.city}`,
+        issueSummary: t.summary,
+        urgency: t.urgency,
+        contractorName: name,
+        contractorCompany: t.contractor?.company ?? null,
+        trade: t.contractor?.trade ?? "contractor",
+        when: formatSlot(res.scheduled_at!, res.ends_at!, "en"),
+        visitFirst: visitFirst ?? null,
+        patternNote: t.pattern_flag ? t.pattern_note : null,
+      });
+      const r = await sendEmail({ to, ...mail });
+      emailSent = r.sent;
+      await ticketEvent(ticketId, "email", r.sent ? `Tenant emailed: "${mail.subject}"` : `Tenant email not sent (${r.error})`);
+    }
     if (t) await notifyNeighbour(t, res.scheduled_at!, res.ends_at!);
     return {
       confirmed: true,
       scheduled_at: res.scheduled_at!,
-      tenant_sms_sent: smsSent,
+      tenant_sms_sent: smsSent || emailSent,
       message: `Booked for ${formatSlot(res.scheduled_at!, res.ends_at!, t?.contractor?.language ?? "en")}. Thank the contractor and end the call.`,
     };
   },

@@ -4,7 +4,7 @@ import { connection } from "next/server";
 import { db, must } from "@/lib/db";
 import { formatSlot, formatTime, formatWindow, startsInWindow } from "@/lib/time";
 
-const TICKET_COLUMNS = `id, unit_id, visit_unit_id, issue_type, urgency, status, summary, photo_path, photo_assessment, photo_safety_advice,
+const TICKET_COLUMNS = `id, unit_id, visit_unit_id, issue_type, urgency, status, summary,
   pattern_flag, pattern_note, contractor_id, scheduled_at, call_started_at, booked_at, created_at, seed,
   tenant_call_id, dispatcher_call_id, dispatch_attempts, escalation_reason,
   contractor:contractors(name, company, trade, rating, language),
@@ -39,7 +39,7 @@ export async function GET() {
   const slotRows = must(slots, "slots") as { id: number; contractor_id: number; starts_at: string; ends_at: string; booked: boolean }[];
 
   type TicketRow = Record<string, unknown> & {
-    id: number; unit_id: number; visit_unit_id: number | null; contractor_id: number | null; photo_path: string | null;
+    id: number; unit_id: number; visit_unit_id: number | null; contractor_id: number | null;
     scheduled_at: string | null; events: { id: number; created_at: string }[];
     contractor: { name: string; company: string | null; rating: number; language: string } | null;
     tenant: { name: string } | null;
@@ -48,15 +48,9 @@ export async function GET() {
 
   const out = await Promise.all(
     ticketRows.map(async (t) => {
-      let photo_url: string | null = null;
-      if (t.photo_path) {
-        const s = await sb.storage.from("photos").createSignedUrl(t.photo_path, 3600);
-        photo_url = s.data?.signedUrl ?? null;
-      }
       const unit = unitRows.find((u) => u.id === t.unit_id);
       return {
         ...t,
-        photo_path: undefined,
         unit: unit?.label ?? "?",
         stack: unit?.stack ?? "?",
         visit_first: label(t.visit_unit_id),
@@ -70,7 +64,6 @@ export async function GET() {
         scheduled_label: t.scheduled_at ? formatTime(t.scheduled_at) : null,
         tenant_window:
           t.available_from || t.available_until ? formatWindow((t.available_from as string) ?? null, (t.available_until as string) ?? null) : null,
-        photo_url,
         events: [...(t.events ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id),
         // The slots the dispatcher may offer: this contractor's free ones that fit when the tenant is home.
         offered_slots: slotRows
