@@ -11,14 +11,15 @@ This is the one place that says what is set up where, what has been proven to wo
 | Inbound call on the Dutch number | ✅ Works |
 | Caller recognised and greeted by name | ✅ Works (both of Kennedy's phones) |
 | Triage, ticket created | ✅ Works |
-| Pattern moment ("third leak in your stack, plumber goes to 4B first") | ✅ Works |
+| Pattern moment (plumber goes to 4B first) | ✅ Works. Since Saturday ~10:10 the tenant agent **doesn't say it out loud**; it shows on the dashboard and routes the plumber |
 | Outbound call to the contractor | ✅ Works (after the Telnyx fix, see [Fixed tonight](#fixed-tonight)) |
 | Contractor accepts a slot, ticket booked | ✅ Works: ticket 1013 booked about 1.5 minutes after the call started |
 | Fallback to the second plumber | ✅ Works (Jan's call ended early, so Mila was called and booked) |
 | Agents follow the speaker's language | ✅ Works: the dispatcher opened in Dutch and switched to English when asked |
 | Dashboard data and live transcript | ✅ Works (not yet checked on the big screen) |
 | **Tenant confirmation email** | ✅ Live: sent through Gmail (kennedyf531@gmail.com, app password) to `CONFIRMATION_EMAIL_TO` when a slot is booked. Test email delivered Saturday ~09:50 |
-| Confirmation text, neighbour text (SMS) | ⏸️ Not sent: the Twilio trial (account made Saturday, number +1 478 834 9568) refused even the sign-up number (error 21608) and won't verify other Dutch numbers. Twilio isn't configured on Vercel, so texts are logged on the ticket and shown on the dashboard instead |
+| Confirmation text (SMS) | ⏸️ Not sent: the Twilio trial refused even the sign-up number (error 21608). Twilio isn't configured on Vercel; the email replaces it |
+| Neighbour access text | 🗑️ Removed completely on Saturday ~10:10 (texts, reply endpoint, dashboard step and card) |
 | Photo upload with vision | 🗑️ Removed completely on Saturday morning (page, API, tools, dashboard card and step). The live database still has the unused `photo_*` columns and `photos` bucket, which are harmless |
 | Emergency path (gas, fire) | ❔ Not tested live |
 | German tenant call | Not needed: the demo is English and Maastricht-based now (German still works if a caller speaks it) |
