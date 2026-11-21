@@ -17,7 +17,7 @@ This is the one place that says what is set up where, what has been proven to wo
 | Fallback to the second plumber | Removed: Jan is the only plumber, a missed call escalates |
 | Agents follow the speaker's language | ✅ Works: the dispatcher opened in Dutch and switched to English when asked |
 | Dashboard data and live transcript | ✅ Works (not yet checked on the big screen) |
-| **Tenant confirmation email** | ✅ Live: sent through Gmail (kennedyf531@gmail.com, app password) to `CONFIRMATION_EMAIL_TO` when a slot is booked. Test email delivered Saturday ~09:50 |
+| **Tenant confirmation email** | ✅ Live: sent through Gmail (the team's Gmail, app password) to `CONFIRMATION_EMAIL_TO` when a slot is booked. Test email delivered Saturday ~09:50 |
 | Confirmation text (SMS) | ⏸️ Not sent: the Twilio trial refused even the sign-up number (error 21608). Twilio isn't configured on Vercel; the email replaces it |
 | Neighbour access text | 🗑️ Removed completely on Saturday ~10:10 (texts, reply endpoint, dashboard step and card) |
 | Photo upload with vision | 🗑️ Removed completely on Saturday morning (page, API, tools, dashboard card and step). The live database still has the unused `photo_*` columns and `photos` bucket, which are harmless |
@@ -82,7 +82,7 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 - Debugging → SIP Call Flow Tool shows every call with its SIP reason. It's the quickest way to see why a call failed.
 
 ### Gmail: booking confirmation email
-- Sends from **kennedyf531@gmail.com** with a Google **app password** named "demo" (Google Account → Security → App passwords). Revoke it there after the hackathon.
+- Sends from **the team's Gmail** (`GMAIL_USER`) with a Google **app password** named "demo" (Google Account → Security → App passwords). Revoke it there after the hackathon.
 - All tenant confirmations go to `CONFIRMATION_EMAIL_TO` (currently the same address), since there's one demo tenant. Real tenants would need an email column on `tenants`.
 - Code: `src/lib/email.ts`, called from `confirm_slot` in `src/lib/tools/index.ts`. A failed email never breaks the call; it's logged on the ticket as "Tenant email not sent".
 
