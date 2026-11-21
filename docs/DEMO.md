@@ -31,12 +31,12 @@ Every contractor rings **…7117** right now, including the fallback plumber. If
 | | **1. It knows who's calling** | Agent: "Hi Kennedy, this is Hausmeister. Is this about apartment 3B in Building B?" Tenant: "Yes." | **Activity: Caller identified** |
 | | **2. Triage** | Tenant: "Water is dripping from my ceiling." It asks up to two questions. Tenant: "Still dripping, and it's next to the ceiling light." | Conversation panel, live transcript |
 | | **3. Ticket** | Agent creates the ticket (it should say not to touch the light). | Headline changes to the problem, urgency "Urgent" |
-| | **4. Context moment** (the line Reltix will remember) | The agent checks the building's history **silently**. **Presenter** points at the screen: "While it's talking, it checked the building: this is the third leak in the same stack, so the plumber goes to 4B, the flat above, first." | **Pattern detected** banner, **building map lights up 4B "Visit first"** |
+| | **4. Context moment** | The agent says nothing about it. **Presenter** points at the screen: "Behind the scenes it already spotted this is the third leak in the same stack this month." | **Pattern detected** banner |
 | | **5. When are you home?** | Agent: "When are you home today?" Tenant: "From twelve." | — |
 | | **6. Contractor called** | Agent: "I'm calling Jan now…", then hangs up. **…7117 rings.** | Badge "Calling contractor", **Dispatch** card |
 | | **7. The plumber** | Dispatcher opens in Dutch. Emmanuel either answers in Dutch (point at the **live English subtitles**) or says "English please" (it switches). It briefs him and offers the times that fit. Emmanuel: "The twelve o'clock works." | Contractor tab in the transcript |
-| ~2:10 | **8. Booked** | Dispatcher confirms and hangs up. Seconds later the **confirmation email** arrives in kennedyf531@gmail.com: plumber, time, flat, ticket number, "check 4B first" and a safety tip. | **Timer stops**, "Booked", **Tenant notified: Confirmation emailed**, the **"What this call did"** card. Optional: show the email on a phone or a second screen |
-| 2:10–2:40 | **Why it works** | Presenter: "Reltix says AI isn't the differentiator, context is. Hausmeister is what that context sounds like on the phone." | Pattern banner / building map again |
+| ~2:10 | **8. Booked** | Dispatcher confirms and hangs up. Seconds later the **confirmation email** arrives in kennedyf531@gmail.com: plumber, time, flat, ticket number and a safety tip. | **Timer stops**, "Booked", **Tenant notified: Confirmation emailed**, the **"What this call did"** card. Optional: show the email on a phone or a second screen |
+| 2:10–2:40 | **Why it works** | Presenter: "Reltix says AI isn't the differentiator, context is. Hausmeister is what that context sounds like on the phone." | Pattern banner again |
 | 2:40–3:00 | **Close** | Presenter: "[Time on the timer] from call to plumber booked. Any hour, any language. Tenants don't want a ticket number. They want the plumber booked." | Impact card |
 
 **Notifications:** the tenant's confirmation goes out **by email** (Gmail, live). There are no texts in the demo.

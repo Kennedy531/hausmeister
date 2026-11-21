@@ -47,11 +47,8 @@ export function bookingEmail(d: {
   contractorCompany: string | null;
   trade: string;
   when: string;
-  visitFirst: string | null;
-  patternNote: string | null;
 }): { subject: string; text: string; html: string } {
   const who = d.contractorCompany ? `${d.contractorName} (${d.contractorCompany})` : d.contractorName;
-  const first = d.visitFirst && d.visitFirst !== d.unit ? `They'll check flat ${d.visitFirst} first, because the leak may be coming from there.` : null;
   const tip =
     d.urgency === "emergency"
       ? "If you smell gas or see smoke or sparks: leave the flat and call 112."
@@ -70,8 +67,6 @@ export function bookingEmail(d: {
     `Your repair is booked. Here are the details:`,
     "",
     ...rows.map(([k, v]) => `${k}: ${v}`),
-    ...(first ? ["", first] : []),
-    ...(d.patternNote ? ["", `Why: ${d.patternNote}`] : []),
     "",
     tip,
     "",
@@ -86,7 +81,6 @@ export function bookingEmail(d: {
 <table style="border-collapse:collapse;width:100%;font-size:14px;margin:16px 0">${rows
     .map(([k, v]) => `<tr><td style="padding:6px 12px 6px 0;color:#666;white-space:nowrap;vertical-align:top">${esc(k)}</td><td style="padding:6px 0">${esc(v)}</td></tr>`)
     .join("")}</table>
-${first ? `<p>${esc(first)}</p>` : ""}${d.patternNote ? `<p style="color:#555">Why: ${esc(d.patternNote)}</p>` : ""}
 <p style="background:#fff7e6;border:1px solid #ffe0a3;border-radius:6px;padding:10px 12px">${esc(tip)}</p>
 <p style="font-size:13px;color:#666">Need to change something? Just call the caretaker line again.</p>
 </body></html>`;

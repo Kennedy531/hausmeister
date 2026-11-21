@@ -16,7 +16,6 @@ const UNIT = { type: "string", description: "Apartment label, e.g. 3B" };
 
 export const tenantTools = [
   fn("lookup_tenant", "Look up the caller by caller ID. Only call when the caller is not already known."),
-  fn("get_building_context", "Check the building's recent history for the same issue in the caller's stack.", { unit: UNIT, issue_type: ISSUE }, ["unit", "issue_type"]),
   fn("create_ticket", "Create the repair ticket once the issue and urgency are clear.", {
     unit: UNIT, issue_type: ISSUE, urgency: URGENCY,
     summary: { type: "string", description: "One sentence in English describing the problem" },

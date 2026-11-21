@@ -188,12 +188,6 @@ export default function DashboardView() {
   const running = Boolean(startedAt && !stopAt && !viewingPast && now && now - Date.parse(startedAt!) < 15 * 60e3);
   const elapsed = startedAt ? (stopAt ?? (running ? now : Date.parse(startedAt))) - Date.parse(startedAt) : 0;
   const status = statusOf(ticket, anyLive, dispatcherLive);
-  // Hold the pattern back until the agent has looked up the history, so the screen doesn't
-  // give away the context moment before it's said on the call.
-  const revealPattern = Boolean(
-    ticket?.pattern_flag &&
-      (viewingPast || ticket.events.some((e) => e.kind === "dispatch") || lines.tenant.some((l) => l.role === "tool" && l.text.startsWith("get_building_context"))),
-  );
 
   return (
     <div className={`ui-app ${stage ? "is-stage" : ""}`}>
@@ -265,7 +259,7 @@ export default function DashboardView() {
               <Activity ticket={ticket} tenantLines={lines.tenant} startedAt={startedAt} live={anyLive} />
             </Card>
             <Card title="Building" icon="building" aside={<span className="ui-chip">Mock data</span>}>
-              <BuildingMap units={state.units} tickets={state.tickets} ticket={ticket} serverNow={state.now} reveal={revealPattern} />
+              <BuildingMap units={state.units} ticket={ticket} />
               {state.building && (
                 <dl className="ui-kv ui-kv-compact">
                   <dt>Address</dt><dd>{state.building.address}, {state.building.city}</dd>
@@ -277,13 +271,13 @@ export default function DashboardView() {
           </div>
 
           <div className="ui-col">
-            {ticket?.booked_at && <Impact ticket={ticket} tickets={state.tickets} serverNow={state.now} />}
-            {revealPattern && ticket?.pattern_note && (
+            {ticket?.booked_at && <Impact ticket={ticket} />}
+            {ticket?.pattern_flag && (
               <div className="ui-insight">
                 <div className="ui-insight-icon"><Icon name="sparkles" size={16} /></div>
                 <div>
                   <div className="ui-insight-title">Pattern detected in stack {ticket.stack}</div>
-                  <p>{ticket.pattern_note}</p>
+                  <p>{patternText(ticket, state.tickets, state.now)}</p>
                 </div>
               </div>
             )}
@@ -420,7 +414,6 @@ function Timer({ elapsed, running, done }: { elapsed: number; running: boolean; 
 const ACTIVITY = [
   { key: "call", label: "Caller identified", icon: "phone" },
   { key: "created", label: "Ticket created", icon: "ticket" },
-  { key: "pattern", label: "Building history checked", icon: "history" },
   { key: "dispatch", label: "Contractor called", icon: "phone" },
   { key: "booked", label: "Slot booked", icon: "calendar" },
   { key: "sms", label: "Tenant notified", icon: "send" },
@@ -428,20 +421,11 @@ const ACTIVITY = [
 
 function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | null; tenantLines: CallEvent[]; startedAt: string | null; live: boolean }) {
   const ev = (k: string) => ticket?.events.find((e) => e.kind === k);
-  const historyLine = tenantLines.find((l) => l.role === "tool" && l.text.startsWith("get_building_context"));
   const steps: Record<string, { at?: string; detail?: string; state?: "done" | "warn" | "skip" }> = {
     call: tenantLines[0] || ticket
       ? { at: tenantLines[0]?.created_at ?? ticket?.call_started_at ?? undefined, detail: ticket?.tenant_name ? `${ticket.tenant_name} · ${ticket.unit}` : undefined, state: "done" }
       : {},
     created: ev("created") ? { at: ev("created")!.created_at, detail: ticket ? `${cap(ticket.urgency)} ${ticket.issue_type}` : undefined, state: "done" } : {},
-    // When the agent asked for the history (its tool call), not when the ticket stored the pattern.
-    pattern: historyLine || ev("pattern")
-      ? {
-          at: historyLine?.created_at ?? ev("pattern")?.created_at,
-          detail: ticket?.pattern_flag ? `Pattern found · visit ${ticket.visit_first} first` : "No pattern",
-          state: "done",
-        }
-      : ev("dispatch") ? { state: "done", detail: "No pattern" } : {},
     dispatch: ev("dispatch") ? { at: ev("dispatch")!.created_at, detail: ticket?.contractor_name ?? undefined, state: "done" } : {},
     booked: ev("booked") ? { at: ev("booked")!.created_at, detail: ticket?.scheduled_label ?? undefined, state: "done" } : {},
     sms: ev("email")?.message.startsWith("Tenant emailed")
@@ -505,16 +489,9 @@ function ContractorRow({ ticket }: { ticket: Ticket }) {
 }
 
 /** Shown once the job is booked: the business case in four numbers. */
-function Impact({ ticket, tickets, serverNow }: { ticket: Ticket; tickets: Ticket[]; serverNow: string }) {
+function Impact({ ticket }: { ticket: Ticket }) {
   const start = ticket.call_started_at ? Date.parse(ticket.call_started_at) : null;
   const seconds = start && ticket.booked_at ? Math.round((Date.parse(ticket.booked_at) - start) / 1000) : null;
-  const recent = Date.parse(serverNow) - 30 * 86400e3;
-  // One visit covers every open report of the same issue in the stack.
-  const covered = ticket.pattern_flag
-    ? tickets.filter(
-        (t) => t.id !== ticket.id && t.stack === ticket.stack && t.issue_type === ticket.issue_type && t.status !== "resolved" && Date.parse(t.created_at) > recent,
-      ).length
-    : 0;
   const cost = ticket.events.filter((e) => e.kind === "cost").reduce((sum, e) => sum + (Number(e.message.split(" ")[1]) || 0), 0);
   const emailed = ticket.events.some((e) => e.kind === "email" && e.message.startsWith("Tenant emailed"));
   const langs = [...new Set(["en", ticket.contractor_language ?? "en"])].map((l) => l.toUpperCase()).join(" → ");
@@ -524,9 +501,9 @@ function Impact({ ticket, tickets, serverNow }: { ticket: Ticket; tickets: Ticke
       <div className="ui-impact-head"><Icon name="sparkles" size={14} /> What this call did</div>
       <div className="ui-impact-grid">
         <Stat value={seconds !== null ? fmtDuration(seconds) : "—"} label="Call to plumber booked" note={typical ? `Typical: ${typical}` : undefined} />
-        <Stat value={String(covered)} label={covered === 1 ? "Extra visit saved" : "Extra visits saved"} note={covered > 0 ? `${covered + 1} reports, 1 visit` : undefined} />
         <Stat value={emailed ? "Sent" : "—"} label="Confirmation email" note={emailed ? "Plumber, time and ticket" : undefined} />
-        <Stat value={cost > 0 ? `$${cost.toFixed(2)}` : langs} label={cost > 0 ? "Cost of the calls" : "Languages"} note={cost > 0 ? langs : undefined} />
+        <Stat value={cost > 0 ? `$${cost.toFixed(2)}` : "—"} label="Cost of the calls" />
+        <Stat value={langs} label="Languages" />
       </div>
     </section>
   );
@@ -550,7 +527,6 @@ function Details({ ticket, rule }: { ticket: Ticket; rule?: { responsible: strin
       <dt>Issue</dt><dd>{cap(ticket.issue_type)}</dd>
       <dt>Apartment</dt><dd>{ticket.unit} <span className="ui-subtle">· stack {ticket.stack}</span></dd>
       {ticket.tenant_window && (<><dt>Tenant home</dt><dd>{cap(ticket.tenant_window)}</dd></>)}
-      {ticket.visit_first && ticket.visit_first !== ticket.unit && (<><dt>Visit first</dt><dd>{ticket.visit_first}</dd></>)}
       {ticket.dispatch_attempts > 1 && (<><dt>Contractors tried</dt><dd>{ticket.dispatch_attempts}</dd></>)}
       {rule && (
         <>
@@ -562,46 +538,49 @@ function Details({ ticket, rule }: { ticket: Ticket; rule?: { responsible: strin
   );
 }
 
-function BuildingMap({ units, tickets, ticket, serverNow, reveal }: { units: Unit[]; tickets: Ticket[]; ticket: Ticket | null; serverNow: string; reveal: boolean }) {
+/** "3 leak reports in this stack in the last 30 days." No talk of visiting other flats. */
+function patternText(ticket: Ticket, tickets: Ticket[], serverNow: string) {
+  const recent = Date.parse(serverNow) - 30 * 86400e3;
+  const count =
+    1 +
+    tickets.filter(
+      (t) => t.id !== ticket.id && t.stack === ticket.stack && t.issue_type === ticket.issue_type && Date.parse(t.created_at) > recent,
+    ).length;
+  return `${count} ${ticket.issue_type} reports in this stack in the last 30 days.`;
+}
+
+function BuildingMap({ units, ticket }: { units: Unit[]; ticket: Ticket | null }) {
   const stacks = [...new Set(units.map((u) => u.stack))].sort();
   const floors = [...new Set(units.map((u) => u.floor))].sort((a, b) => b - a);
-  const recent = Date.parse(serverNow) - 30 * 86400e3;
   return (
     <div>
       <div className="ui-map" style={{ gridTemplateColumns: `28px repeat(${stacks.length}, 1fr)` }}>
         <span />
         {stacks.map((s) => (
-          <span key={s} className={`ui-map-col ${reveal && ticket?.stack === s ? "is-hot" : ""}`}>Stack {s}</span>
+          <span key={s} className="ui-map-col">Stack {s}</span>
         ))}
         {floors.map((f) => (
-          <MapRow key={f} floor={f} stacks={stacks} units={units} tickets={tickets} ticket={ticket} recent={recent} reveal={reveal} />
+          <MapRow key={f} floor={f} stacks={stacks} units={units} ticket={ticket} />
         ))}
       </div>
       <div className="ui-legend">
-        <span><i className="ui-legend-swatch is-report" /> Similar report</span>
         <span><i className="ui-legend-swatch is-caller" /> Caller</span>
-        <span><i className="ui-legend-swatch is-first" /> Visit first</span>
       </div>
     </div>
   );
 }
 
-function MapRow({ floor, stacks, units, tickets, ticket, recent, reveal }: { floor: number; stacks: string[]; units: Unit[]; tickets: Ticket[]; ticket: Ticket | null; recent: number; reveal: boolean }) {
+function MapRow({ floor, stacks, units, ticket }: { floor: number; stacks: string[]; units: Unit[]; ticket: Ticket | null }) {
   return (
     <>
       <span className="ui-map-floor ui-mono">{floor}</span>
       {stacks.map((s) => {
         const u = units.find((x) => x.floor === floor && x.stack === s);
         if (!u) return <span key={s} className="ui-map-cell is-void" />;
-        const reported = Boolean(
-          reveal && ticket && tickets.some((t) => t.id !== ticket.id && t.unit === u.label && t.issue_type === ticket.issue_type && t.status !== "resolved" && Date.parse(t.created_at) > recent),
-        );
         const caller = ticket?.unit === u.label;
-        const first = Boolean(reveal && ticket?.visit_first === u.label);
         return (
-          <div key={s} className={`ui-map-cell ${reported ? "is-report" : ""} ${caller ? "is-caller" : ""} ${first ? "is-first" : ""}`}>
+          <div key={s} className={`ui-map-cell ${caller ? "is-caller" : ""}`}>
             <span>{u.label}</span>
-            {first && <span className="ui-map-tag">1st</span>}
           </div>
         );
       })}
@@ -774,7 +753,6 @@ function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 
 const TOOL_LABEL: Record<string, string> = {
   lookup_tenant: "Caller ID checked",
-  get_building_context: "Building history checked",
   create_ticket: "Ticket created",
   dispatch_contractor: "Contractor dispatched",
   confirm_slot: "Slot booked",
