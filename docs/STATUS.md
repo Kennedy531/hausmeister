@@ -1,23 +1,29 @@
 # Hausmeister: setup and status
 
-Last updated: Saturday 21 November 2026, about 01:35 (Amsterdam time), after outbound calls were fixed.
+Last updated: Saturday 21 November 2026, about 01:50 (Amsterdam time), after the first complete booking over real phones.
 
-This is the one place that says what is set up where, what has been proven to work, what is broken, and what to do next. Secrets and phone numbers are **not** in this file: they live in each person's `.env.local`, in Vercel and in the Supabase database.
+This is the one place that says what is set up where, what has been proven to work, what is broken, and what is left before the demo. Secrets and phone numbers are **not** in this file: they live in each person's `.env.local`, in Vercel and in the Supabase database.
 
 ## At a glance
 
 | Part | Status |
 |---|---|
-| Inbound call on the Dutch number | ✅ Works (real call, 01:03) |
-| Caller recognised and greeted by name | ✅ Works |
+| Inbound call on the Dutch number | ✅ Works |
+| Caller recognised and greeted by name | ✅ Works (both of Kennedy's phones) |
 | Triage, ticket created | ✅ Works |
-| Pattern moment ("third leak in your stack, plumber goes to 4B first") | ✅ Works (live test) |
-| Dashboard data and live transcript | ✅ Works |
-| Dispatch logic (pick contractor, fallback to the second plumber, escalate) | ✅ Works |
-| **Outbound call to the contractor** | ✅ Works since about 01:25 (the dispatch phone rang twice, calls of 13 s and 32 s), after the Telnyx fix below |
-| Confirmation text (SMS) | ⏸️ Not set up: no Twilio yet. Texts are logged instead of sent |
-| Photo upload with vision | ❔ Not tested live |
-| German / Dutch calls | ❔ Not tested live |
+| Pattern moment ("third leak in your stack, plumber goes to 4B first") | ✅ Works |
+| Outbound call to the contractor | ✅ Works (after the Telnyx fix, see [Fixed tonight](#fixed-tonight)) |
+| Contractor accepts a slot, ticket booked | ✅ Works: ticket 1013 booked about 1.5 minutes after the call started |
+| Fallback to the second plumber | ✅ Works (Jan's call ended early, so Mila was called and booked) |
+| Agents follow the speaker's language | ✅ Works: the dispatcher opened in Dutch and switched to English when asked |
+| Dashboard data and live transcript | ✅ Works (not yet checked on the big screen) |
+| Confirmation text, neighbour text, photo link (SMS) | ⏸️ No Twilio yet: texts are logged on the ticket instead of sent |
+| Photo upload with vision | ❔ Not tested live (needs SMS for the link) |
+| Emergency path (gas, fire) | ❔ Not tested live |
+| German tenant call | ❔ Not tested live |
+| Tenant availability ("when are you home?") | 🚧 On `dev` only: needs migration 002 and an agent sync before it can go live |
+
+Measured call costs (from Vapi, Friday night tests): tenant call about **$0.07**, dispatcher call about **$0.05–0.09**. Useful for the "what does a call cost?" question.
 
 ## Live addresses
 
@@ -33,31 +39,34 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 
 ### GitHub: `Kennedy531/hausmeister` (private)
 - Collaborators: `Tadiwa-M`, `emmanuel418`.
-- `main`: the merged prototype plus setup fixes.
-- `dev`: one commit ahead of `main` (neighbour access text, Dutch-speaking plumber with live English subtitles, impact card). **Production is currently built from `dev`.**
+- `main`: everything merged so far, plus tonight's setup fixes, docs and prompt changes.
+- `dev`: Tadiwa's working branch, **3 commits ahead of `main`** (tenant availability window, see [Pending](#pending-on-dev-tenant-availability)). Production is currently built from an older `dev` commit.
 - `track-a-calls`, `track-b-data`: no longer used (see `docs/TRACKS.md`).
 
 ### Vercel: project `hausmeister` (account `kennedy531`, Hobby)
 - Domain: `hausmeister-green.vercel.app`.
-- 17 environment variables are set: the Supabase URL and keys, OpenAI, Vapi key, phone number id, both assistant ids, webhook secret, voice and model settings, dashboard admin key, time zone and `PUBLIC_BASE_URL`.
-- The current production deploy was made from `dev` by another Claude session (Vercel shows it as "by claude"), then redeployed once to pick up the assistant ids. **Whoever deploys last decides what is live.** Agree on one branch.
-- The secrets were saved as type "Config", so anyone added to the Vercel project can read them. Fine on a personal account.
+- 17 environment variables: the Supabase URL and keys, OpenAI, Vapi key, phone number id, both assistant ids, webhook secret, voice and model settings, dashboard admin key, time zone and `PUBLIC_BASE_URL`.
+- The production deploy was made from `dev` by another Claude session ("by claude"), then redeployed to pick up the assistant ids. **Whoever deploys last decides what is live.**
 - Redeploying from the Vercel dashboard asks for Kennedy's two-factor code.
+- The secrets were saved as type "Config", so anyone added to the project can read them. Fine on a personal account.
 
 ### Supabase: project `hausmeister` (ref `emwupfxksbozowyznkrb`, West EU / Paris, free plan)
-- Applied: `supabase/schema.sql` + `supabase/seed.sql` (from `main`), then `dev`'s `supabase/migrations/001_dutch_and_translation.sql`.
-- `schema.sql` now grants the API roles table access itself, because new Supabase projects no longer do that automatically.
-- **Demo data changed by hand tonight** (not in the seed files):
-  - The 3B tenant is now **Kennedy** with Kennedy's mobile, English.
-  - **All five contractors** (Jan, Mila, Ingrid, Kai, Olu) use the same test "dispatch" phone, so any trade rings a real phone.
-  - Jan and Mila (the plumbers) speak Dutch, from `dev`'s migration.
-- Before each rehearsal: `select reset_demo();` or the dashboard's Reset button. It removes call-created tickets, re-dates the history and creates two free slots per contractor (2 and 5 hours from now). Tenants and contractors are kept.
+- Applied: `supabase/schema.sql` + `supabase/seed.sql`, then `supabase/migrations/001_dutch_and_translation.sql`.
+- **Not applied yet:** `supabase/migrations/002_tenant_availability.sql` (on `dev`).
+- `schema.sql` grants the API roles table access itself, because new Supabase projects no longer do that automatically.
+- **Demo data changed by hand** (not in the seed files):
+  - Two tenants named **Kennedy** in flat **3B**, with Kennedy's two mobiles (…9862 and …7117), English. The first replaced the seeded "Tadiwa".
+  - **All five contractors** (Jan, Mila, Ingrid, Kai, Olu) currently ring **Kennedy's …9862**, so any trade reaches a real phone during testing.
+  - Jan and Mila (the plumbers) are set to Dutch.
+- Before each rehearsal: **Reset demo** on the dashboard, or `select reset_demo();`. It removes call-created tickets, re-dates the history and creates fresh free slots for today. Tenants and contractors are kept.
 
 ### Vapi: Kennedy's org
 - Assistants, created and updated by `node scripts/sync-agents.mjs`:
   - `Hausmeister Tenant Line`: `03c11232-38a7-464f-ad9c-006de9ebe689`
   - `Hausmeister Dispatcher`: `c197990d-ebf1-4e1f-ae3d-b95947193b14`
-- The Dutch number has **two** Vapi entries, and both now point at the webhook with no fixed assistant:
+- Last synced from `main` at about 01:45, including the language-following and "ask again" prompt changes. `dev`'s newer prompts are **not** synced yet.
+- Voice: ElevenLabs `eleven_flash_v2_5`, voice `sarah`. Model: `gpt-4.1-mini`. Transcriber: Deepgram `nova-3`, `multi` (understands English, German and Dutch).
+- The Dutch number has **two** Vapi entries, and both point at the webhook with no fixed assistant:
   - `4e36f1a0-…` "Fysio Receptie (SIP)": the BYO number entry. It is `VAPI_PHONE_NUMBER_ID`, used for **outbound** dispatcher calls. `sync-agents.mjs` updates this one.
   - `c8a2b7f1-…` "Fysio Receptie (SIP Direct)", `sip:evafysio@sip.vapi.ai`: the carrier forwards **inbound** calls here. `sync-agents.mjs` does **not** update it; it was changed by hand.
 - SIP trunk credential `c2d3f6db-…` "Telnyx SIP Trunk": two gateways (185.246.41.140/.141, Telnyx EU), inbound and outbound enabled, **tech prefix `7391`** (must match Telnyx).
@@ -65,32 +74,72 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 ### Telnyx: the account that owns +31 85 083 5699 (not Kennedy's empty personal Telnyx account)
 - SIP connection **"Kyrix"** (id `3011813459068192313`, type FQDN → `sip.vapi.ai:5060`).
 - Outbound calls authentication: **IP Addresses**, `44.229.228.186` and `44.238.177.138` (Vapi's US SIP servers), IP authentication method **Tech Prefix `7391`**. No SIP password is involved.
-- Outbound voice profile: **"Default"** (Global, rate deck), attached to the Kyrix connection. Allowed destinations: North America (as before) plus **Netherlands +31** and **Germany +49**.
-- Telnyx's call log (Debugging → SIP Call Flow Tool) shows every inbound and outbound call with the SIP reason, which is the quickest way to see why a call failed.
-- Voice: ElevenLabs `eleven_flash_v2_5`, voice `sarah`. Model: `gpt-4.1-mini`. Transcriber: Deepgram `nova-3`, `multi`.
+- Outbound voice profile **"Default"** (Global, rate deck), attached to the Kyrix connection. Allowed destinations: North America (as before) plus **Netherlands +31** and **Germany +49**.
+- Debugging → SIP Call Flow Tool shows every call with its SIP reason. It's the quickest way to see why a call failed.
 
 ### Not set up yet
-- **Twilio** (SMS): needs an account SID, auth token and sending number.
-- `ONCALL_MANAGER_PHONE`, `DEMO_NEIGHBOUR_PHONE`, `NEXT_PUBLIC_TYPICAL_RESPONSE` (the last two are new on `dev`).
+- **Twilio** (SMS): account SID, auth token and sending number (`scripts/set-env.sh TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER`, then the same three in Vercel and a redeploy).
+- `ONCALL_MANAGER_PHONE`, `DEMO_NEIGHBOUR_PHONE`, `NEXT_PUBLIC_TYPICAL_RESPONSE`.
+
+## Pending on `dev`: tenant availability
+
+Tadiwa's latest `dev` commits make the tenant agent ask *"When are you home today?"* and only offer and book contractor slots in that window (three slots per contractor a day). Before this goes live, in this order:
+1. Run `supabase/migrations/002_tenant_availability.sql` in the Supabase SQL editor. **Do this before deploying**, or the new code will likely fail when it writes tickets or slots.
+2. Merge `dev` into `main` and deploy.
+3. Run `node scripts/sync-agents.mjs` from that same code, so the prompts match.
+4. Reset the demo (to get three slots per contractor), then do a full test call.
+
+## Fixed tonight
+
+### Outbound calls failed (fixed at about 01:25)
+Three Telnyx problems, each with its own error:
+1. `SIP 407 proxy authentication required`: the Kyrix connection required a login Vapi didn't have. Fixed with IP authentication for Vapi's servers, plus tech prefix `7391` on both Telnyx and Vapi.
+2. Telnyx wouldn't attach an outbound voice profile until outbound authentication was configured. Fixed by attaching "Default" after step 1.
+3. `403 Dialed number …`, Q.850 cause 21: the profile only allowed North America. Fixed by allowing the Netherlands and Germany.
+
+If Vapi ever moves to an EU org, its SIP server is `63.182.83.170`, and that IP has to be added in Telnyx too. `scripts/set-sip-auth.mjs` is only needed if the connection is switched back to a username and password login.
+
+### Inbound calls reached the Fysio receptionist
+The carrier forwards the number to the SIP Direct entry, which still had the Fysio assistant. Fixed by pointing that entry at the webhook too.
+
+### Dispatcher prompt
+- It now answers in whatever language the contractor speaks (it used to speak Dutch "for the whole call"). The tenant agent does the same for English, German and Dutch.
+- It no longer says "I've texted the tenant" unless the text was really sent.
+- It asks again on short or unclear answers instead of hanging up. A misheard "none" had ended a call.
 
 ## Known issues
 
-### 1. ~~Outbound calls failed~~ (fixed at about 01:25)
-Three things were wrong, and each produced its own error:
-1. `SIP 407 proxy authentication required`: the Kyrix connection required a SIP login that Vapi didn't have. Fixed by switching it to IP authentication for Vapi's servers, plus tech prefix `7391` on both Telnyx and Vapi.
-2. Telnyx wouldn't attach an outbound voice profile until the connection's outbound authentication was configured. Fixed by attaching "Default" after step 1.
-3. `403 Dialed number … (associated …)`, Q.850 cause 21: the profile only allowed North America. Fixed by allowing the Netherlands and Germany.
+1. **Hanging up on a dispatcher call makes the app call the next contractor.** That's the intended fallback, but while every contractor rings the same test phone, it rings again. To stop all dispatching, press **Reset demo**.
+2. **Voicemail:** in one test the dispatcher pitched the job to an answering machine. The contractor on stage should answer quickly; Vapi's voicemail detection is worth turning on.
+3. **Late-night slots:** slots are 2 and 5 hours after the last reset, so a reset at night offers times like "3 to 5 in the morning". Reset in the morning before rehearsing.
+4. **The SIP Direct entry isn't managed by the sync.** If the webhook address ever changes, update `c8a2b7f1-…` by hand too.
+5. **The mock address is hard to pronounce** ("Beispielweg" came out as "Bayspielweg"). An easier mock street name would sound better on stage.
 
-If Vapi ever moves to an EU org, its SIP server is `63.182.83.170` instead, and that IP has to be added in Telnyx. `scripts/set-sip-auth.mjs` is only needed if the connection is ever switched back to a username and password login.
+## What's left before the demo
 
-### 4. A dispatcher call that ends without a booking makes the app call the next contractor
-That is intended (the fallback), but during testing it means hanging up on Jan makes Mila's phone ring next. Right now every contractor uses the same test phone, so it rings again. To stop all dispatching, press **Reset demo** (or `select reset_demo();`): it removes the call-created tickets, so there's nothing left to dispatch for.
+### Must do
+1. **Twilio for texts.** Demo moment 6 (the tenant's phone buzzing with the confirmation), the photo link and the neighbour text all need it. Trial accounts only text verified numbers, so verify the demo phones.
+2. **Demo cast and numbers.** Decide who calls as the tenant (the plan says Tadiwa), then in Supabase:
+   - put the right name and number on the 3B tenant
+   - Jan → Emmanuel's phone, Mila → a spare phone (so the fallback is visible), and the other contractors back to something sensible
+   - decide Jan's language: Dutch with English subtitles on the dashboard, or English
+   - set `ONCALL_MANAGER_PHONE` (local and Vercel).
+3. **One branch, one deploy.** Agree with Tadiwa which branch is final, run migration 002 if it's `dev`, merge into `main`, redeploy, then re-run `sync-agents.mjs` from that code.
+4. **Rehearse 5 or more times in the hall** (Reset before each), test in the noise, record the backup video around 08:30, code freeze at 09:00.
 
-### 2. Production runs `dev`, `main` is one commit behind
-Fine for tonight. Agree on one branch for the demo, merge it into `main` and deploy from `main`.
+### Test once
+5. Photo moment (after Twilio): link, upload, vision assessment, safety advice.
+6. Emergency path: "I smell gas" should give the safety script and an escalated ticket, with no dispatch.
+7. A German tenant call, and switching language mid-call.
+8. The dashboard on the big screen with the admin key: the timer stops at booking, the pattern highlight shows.
+9. The "ask again" fix: answer the dispatcher with a single short word.
 
-### 3. The SIP Direct entry isn't managed by the sync
-If the webhook address ever changes, update `c8a2b7f1-…` by hand too, or calls go nowhere.
+### Pitch
+10. Slides, script and Q&A (Emmanuel). Use the measured call costs above, and confirm the pitch format with the organisers.
+
+### Nice to have
+- Voicemail detection on the dispatcher.
+- An easier mock street name.
 
 ## How to
 
@@ -102,20 +151,11 @@ node scripts/simulate-demo.mjs     # the six demo moments against the webhook, w
 node scripts/sync-agents.mjs       # push agent prompts and settings to Vapi
 ```
 
-- **Change an agent's prompt:** edit `agents/`, then run `node scripts/sync-agents.mjs` **from the same branch that is deployed**, so prompts and code match.
-- **Test the dispatcher without a tenant call:** send `create_ticket` (unit 3B, leak) and then `dispatch_contractor` (plumber) to the webhook with the secret, as `scripts/fake-tool-call.mjs` does. This rings the test dispatch phone for real.
-- **Check what happened on a call:** Vapi dashboard, then Logs, or `GET https://api.vapi.ai/call?limit=5`. The ticket timeline in Supabase (`ticket_events`) records each dispatch attempt and its error.
+- **Change an agent's prompt:** edit `agents/`, then run `node scripts/sync-agents.mjs` from the same code that is deployed, so prompts and code match.
+- **Test the dispatcher without a tenant call:** send `create_ticket` (unit 3B, leak) and then `dispatch_contractor` (plumber) to the webhook with the secret, as `scripts/fake-tool-call.mjs` does. This rings the contractor's phone for real.
+- **Check what happened on a call:** Vapi dashboard → Logs, or `GET https://api.vapi.ai/call?limit=5`. The ticket timeline in Supabase (`ticket_events`) records each dispatch attempt, booking and text. Telnyx's SIP Call Flow Tool shows the phone-network side.
 
 ## After the hackathon: give the number back to Fysio
 1. On Vapi entry `c8a2b7f1-…` (SIP Direct): set the assistant back to **Fysio Receptie (NL)** `ade56fb6-a171-41ce-ae38-6548356783ce` and remove the server URL.
 2. On Vapi entry `4e36f1a0-…`: remove the server URL.
-
-## Morning checklist (Saturday)
-
-1. **Full end-to-end test:** call the line, report a leak in 3B, answer the dispatcher on the second phone and **accept a slot**. Check that the dashboard shows the booking and the timer stops. Outbound calls now connect, but a booking hasn't been completed yet.
-2. **Decide the demo cast:** who calls as the tenant (Kennedy or Tadiwa) and whose phone plays Jan. Update the tenant name and number and the contractor numbers in Supabase. Give Mila a different phone from Jan, so the fallback is visible.
-3. **Pick the deploy branch** (`dev` or `main`), merge, redeploy, then re-run `sync-agents.mjs` from it.
-4. **Twilio** for the confirmation text, and verify the demo phones in the trial.
-5. **Optional demo upgrade:** the tenant agent asks *"When are you home today?"* and the dispatcher only offers the plumber slots that fit. It touches the tenant prompt and the dispatch tool, so agree with Tadiwa first.
-6. Test German and Dutch calls and the photo moment.
-7. Rehearse at least 5 times (Reset before each), record the backup video, code freeze at 09:00.
+3. In Telnyx, decide whether to keep the Kyrix connection's outbound settings (IP authentication, Default profile, NL/DE destinations) or undo them.
