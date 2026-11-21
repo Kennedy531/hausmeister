@@ -20,7 +20,7 @@ This is the one place that says what is set up where, what has been proven to wo
 | Confirmation text, neighbour text, photo link (SMS) | ⏸️ No Twilio yet: texts are logged on the ticket instead of sent |
 | Photo upload with vision | ❔ Not tested live (needs SMS for the link) |
 | Emergency path (gas, fire) | ❔ Not tested live |
-| German tenant call | ❔ Not tested live |
+| German tenant call | Not needed: the demo is English and Maastricht-based now (German still works if a caller speaks it) |
 | Tenant availability ("when are you home?") | 🚧 On `dev` only: needs migration 002 and an agent sync before it can go live |
 
 Measured call costs (from Vapi, Friday night tests): tenant call about **$0.07**, dispatcher call about **$0.05–0.09**. Useful for the "what does a call cost?" question.
@@ -54,6 +54,7 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 - Applied: `supabase/schema.sql` + `supabase/seed.sql`, then `supabase/migrations/001_dutch_and_translation.sql`.
 - **Not applied yet:** `supabase/migrations/002_tenant_availability.sql` (on `dev`).
 - `schema.sql` grants the API roles table access itself, because new Supabase projects no longer do that automatically.
+- **The demo building is in Maastricht** (Building B, Maasboulevard 7, mock address). All tenants are English-speaking, placeholder numbers are +31, and contractor companies have English and Dutch names (Schulte Plumbing, Brandt Electric, Maas Locksmiths, Okafor Home Services, Maas Pipe Services). This is in both the live database and `supabase/seed.sql`.
 - **Demo data changed by hand** (not in the seed files):
   - Two tenants named **Kennedy** in flat **3B**, with Kennedy's two mobiles (…9862 and …7117), English. The first replaced the seeded "Tadiwa".
   - **All five contractors** (Jan, Mila, Ingrid, Kai, Olu) currently ring **Kennedy's …9862**, so any trade reaches a real phone during testing.
@@ -113,7 +114,7 @@ The carrier forwards the number to the SIP Direct entry, which still had the Fys
 2. **Voicemail:** in one test the dispatcher pitched the job to an answering machine. The contractor on stage should answer quickly; Vapi's voicemail detection is worth turning on.
 3. **Late-night slots:** slots are 2 and 5 hours after the last reset, so a reset at night offers times like "3 to 5 in the morning". Reset in the morning before rehearsing.
 4. **The SIP Direct entry isn't managed by the sync.** If the webhook address ever changes, update `c8a2b7f1-…` by hand too.
-5. **The mock address is hard to pronounce** ("Beispielweg" came out as "Bayspielweg"). An easier mock street name would sound better on stage.
+5. ~~The mock address was hard to pronounce~~ ("Beispielweg" came out as "Bayspielweg"). Now Maasboulevard, Maastricht.
 
 ## What's left before the demo
 
@@ -130,7 +131,7 @@ The carrier forwards the number to the SIP Direct entry, which still had the Fys
 ### Test once
 5. Photo moment (after Twilio): link, upload, vision assessment, safety advice.
 6. Emergency path: "I smell gas" should give the safety script and an escalated ticket, with no dispatch.
-7. A German tenant call, and switching language mid-call.
+7. Switching language mid-call (English ↔ Dutch).
 8. The dashboard on the big screen with the admin key: the timer stops at booking, the pattern highlight shows.
 9. The "ask again" fix: answer the dispatcher with a single short word.
 
@@ -139,7 +140,6 @@ The carrier forwards the number to the SIP Direct entry, which still had the Fys
 
 ### Nice to have
 - Voicemail detection on the dispatcher.
-- An easier mock street name.
 
 ## How to
 

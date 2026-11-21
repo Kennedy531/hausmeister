@@ -4,7 +4,7 @@
 -- (or press Reset on the dashboard) to clear test tickets and get fresh "today" slots.
 
 insert into buildings (name, address, city, floors, build_year, boiler_type, last_boiler_service)
-values ('Building B', 'Beispielweg 7 (mock address)', 'Düsseldorf', 4, 1962, 'Vaillant ecoTEC plus gas condensing boiler', '2025-10-14');
+values ('Building B', 'Maasboulevard 7 (mock address)', 'Maastricht', 4, 1962, 'Vaillant ecoTEC plus gas condensing boiler', '2025-10-14');
 
 -- Stack B: 2B, 3B, 4B sit directly above each other. Stack A is unrelated.
 insert into units (building_id, label, floor, stack) values
@@ -16,20 +16,20 @@ insert into units (building_id, label, floor, stack) values
   (1, '4B', 4, 'B');
 
 insert into tenants (unit_id, name, phone, language) values
-  ((select id from units where label = '3B'), 'Tadiwa',        '+490000000003', 'en'), -- demo caller
-  ((select id from units where label = '4B'), 'Lena Hoffmann', '+490000000004', 'de'), -- spare number
-  ((select id from units where label = '2B'), 'Murat Yilmaz',  '+490000000002', 'de'),
-  ((select id from units where label = '1A'), 'Sofia Rossi',   '+490000000011', 'en'),
-  ((select id from units where label = '2A'), 'Peter Krämer',  '+490000000012', 'de'),
-  ((select id from units where label = '3A'), 'Aisha Bello',   '+490000000013', 'en');
+  ((select id from units where label = '3B'), 'Tadiwa',        '+310000000003', 'en'), -- demo caller
+  ((select id from units where label = '4B'), 'Lena Hoffmann', '+310000000004', 'en'), -- spare number
+  ((select id from units where label = '2B'), 'Murat Yilmaz',  '+310000000002', 'en'),
+  ((select id from units where label = '1A'), 'Sofia Rossi',   '+310000000011', 'en'),
+  ((select id from units where label = '2A'), 'Peter Krämer',  '+310000000012', 'en'),
+  ((select id from units where label = '3A'), 'Aisha Bello',   '+310000000013', 'en');
 
 insert into contractors (name, company, trade, phone, rating, hourly_rate_eur, language) values
-  ('Jan',    'Jan Schulte Sanitär',    'plumber',     '+490000000100', 4.8, 65, 'nl'), -- speaks Dutch: the dispatcher calls in Dutch -- Emmanuel's phone
-  ('Ingrid', 'Elektro Brandt',         'electrician', '+490000000101', 4.6, 70, 'en'),
-  ('Kai',    'Schlüsseldienst Rhein',  'locksmith',   '+490000000102', 4.4, 55, 'en'),
-  ('Olu',    'Hausservice Okafor',     'handyman',    '+490000000103', 4.7, 45, 'en'),
+  ('Jan',    'Schulte Plumbing',       'plumber',     '+310000000100', 4.8, 65, 'nl'), -- speaks Dutch: the dispatcher calls in Dutch -- Emmanuel's phone
+  ('Ingrid', 'Brandt Electric',        'electrician', '+310000000101', 4.6, 70, 'en'),
+  ('Kai',    'Maas Locksmiths',        'locksmith',   '+310000000102', 4.4, 55, 'en'),
+  ('Olu',    'Okafor Home Services',   'handyman',    '+310000000103', 4.7, 45, 'en'),
   -- Second plumber: called if Jan doesn't pick up (use the spare phone for this).
-  ('Mila',   'Rhein Rohrservice',      'plumber',     '+490000000104', 4.5, 60, 'en');
+  ('Mila',   'Maas Pipe Services',     'plumber',     '+310000000104', 4.5, 60, 'en');
 
 
 -- History. The two open leaks in stack B are what make the context moment work.

@@ -1,9 +1,9 @@
 // Sends a fake Vapi tool-calls payload to the webhook, like Vapi would.
-//   node scripts/fake-tool-call.mjs lookup_tenant '{}' +491510000003
+//   node scripts/fake-tool-call.mjs lookup_tenant '{}' +31610000003
 //   node scripts/fake-tool-call.mjs create_ticket '{"unit":"3B","issue_type":"leak","urgency":"urgent","summary":"Water dripping from the ceiling"}'
 import { env } from "./env.mjs";
 
-const [name = "lookup_tenant", args = "{}", phone = env.DEMO_TENANT_PHONE ?? "+490000000003", callId = "fake-call-1"] = process.argv.slice(2);
+const [name = "lookup_tenant", args = "{}", phone = env.DEMO_TENANT_PHONE ?? "+310000000003", callId = "fake-call-1"] = process.argv.slice(2);
 const base = env.WEBHOOK_BASE_URL ?? "http://localhost:3000";
 
 const res = await fetch(`${base}/api/vapi`, {
