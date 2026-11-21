@@ -1,6 +1,6 @@
 # Hausmeister: setup and status
 
-Last updated: Saturday 21 November 2026, about 01:30 (Amsterdam time), after the first real test calls.
+Last updated: Saturday 21 November 2026, about 01:35 (Amsterdam time), after outbound calls were fixed.
 
 This is the one place that says what is set up where, what has been proven to work, what is broken, and what to do next. Secrets and phone numbers are **not** in this file: they live in each person's `.env.local`, in Vercel and in the Supabase database.
 
@@ -14,7 +14,7 @@ This is the one place that says what is set up where, what has been proven to wo
 | Pattern moment ("third leak in your stack, plumber goes to 4B first") | ✅ Works (live test) |
 | Dashboard data and live transcript | ✅ Works |
 | Dispatch logic (pick contractor, fallback to the second plumber, escalate) | ✅ Works |
-| **Outbound call to the contractor** | ❌ **Blocked**: Telnyx refuses outgoing calls (SIP 407), see [Known issues](#known-issues) |
+| **Outbound call to the contractor** | ✅ Works since about 01:25 (the dispatch phone rang twice, calls of 13 s and 32 s), after the Telnyx fix below |
 | Confirmation text (SMS) | ⏸️ Not set up: no Twilio yet. Texts are logged instead of sent |
 | Photo upload with vision | ❔ Not tested live |
 | German / Dutch calls | ❔ Not tested live |
@@ -60,7 +60,13 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 - The Dutch number has **two** Vapi entries, and both now point at the webhook with no fixed assistant:
   - `4e36f1a0-…` "Fysio Receptie (SIP)": the BYO number entry. It is `VAPI_PHONE_NUMBER_ID`, used for **outbound** dispatcher calls. `sync-agents.mjs` updates this one.
   - `c8a2b7f1-…` "Fysio Receptie (SIP Direct)", `sip:evafysio@sip.vapi.ai`: the carrier forwards **inbound** calls here. `sync-agents.mjs` does **not** update it; it was changed by hand.
-- SIP trunk credential `c2d3f6db-…` "Telnyx SIP Trunk": two gateways (185.246.41.140/.141), inbound and outbound enabled, **no outbound login**.
+- SIP trunk credential `c2d3f6db-…` "Telnyx SIP Trunk": two gateways (185.246.41.140/.141, Telnyx EU), inbound and outbound enabled, **tech prefix `7391`** (must match Telnyx).
+
+### Telnyx: the account that owns +31 85 083 5699 (not Kennedy's empty personal Telnyx account)
+- SIP connection **"Kyrix"** (id `3011813459068192313`, type FQDN → `sip.vapi.ai:5060`).
+- Outbound calls authentication: **IP Addresses**, `44.229.228.186` and `44.238.177.138` (Vapi's US SIP servers), IP authentication method **Tech Prefix `7391`**. No SIP password is involved.
+- Outbound voice profile: **"Default"** (Global, rate deck), attached to the Kyrix connection. Allowed destinations: North America (as before) plus **Netherlands +31** and **Germany +49**.
+- Telnyx's call log (Debugging → SIP Call Flow Tool) shows every inbound and outbound call with the SIP reason, which is the quickest way to see why a call failed.
 - Voice: ElevenLabs `eleven_flash_v2_5`, voice `sarah`. Model: `gpt-4.1-mini`. Transcriber: Deepgram `nova-3`, `multi`.
 
 ### Not set up yet
@@ -69,14 +75,16 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 
 ## Known issues
 
-### 1. Outbound calls fail with `SIP 407 proxy authentication required` (blocks the demo)
-The dispatcher's calls go out through the Telnyx SIP trunk. Telnyx asks for authentication, and Vapi has none configured for that trunk, so every outgoing call is refused. The app then correctly tries the second plumber and escalates. Inbound calls are not affected.
+### 1. ~~Outbound calls failed~~ (fixed at about 01:25)
+Three things were wrong, and each produced its own error:
+1. `SIP 407 proxy authentication required`: the Kyrix connection required a SIP login that Vapi didn't have. Fixed by switching it to IP authentication for Vapi's servers, plus tech prefix `7391` on both Telnyx and Vapi.
+2. Telnyx wouldn't attach an outbound voice profile until the connection's outbound authentication was configured. Fixed by attaching "Default" after step 1.
+3. `403 Dialed number … (associated …)`, Q.850 cause 21: the profile only allowed North America. Fixed by allowing the Netherlands and Germany.
 
-Fix it one of two ways:
-- **In Telnyx (keeps the Dutch caller ID):** check that the number's SIP connection has an outbound voice profile that allows the Netherlands and Germany, and has balance. Then either allow Vapi's servers by IP, or create SIP credentials and add them to the Vapi credential as its outbound authentication (username and password). Kennedy enters any password himself.
-- **Use Twilio for outbound:** import a Twilio number into Vapi and set `VAPI_PHONE_NUMBER_ID` to it, then redeploy. This also provides the SMS. Trial accounts can only call and text verified numbers.
+If Vapi ever moves to an EU org, its SIP server is `63.182.83.170` instead, and that IP has to be added in Telnyx. `scripts/set-sip-auth.mjs` is only needed if the connection is ever switched back to a username and password login.
 
-After fixing it, test with a leak ticket dispatch (see [How to](#how-to)) before calling it done.
+### 4. A dispatcher call that ends without a booking makes the app call the next contractor
+That is intended (the fallback), but during testing it means hanging up on Jan makes Mila's phone ring next. Right now every contractor uses the same test phone, so it rings again. To stop all dispatching, press **Reset demo** (or `select reset_demo();`): it removes the call-created tickets, so there's nothing left to dispatch for.
 
 ### 2. Production runs `dev`, `main` is one commit behind
 Fine for tonight. Agree on one branch for the demo, merge it into `main` and deploy from `main`.
@@ -104,7 +112,7 @@ node scripts/sync-agents.mjs       # push agent prompts and settings to Vapi
 
 ## Morning checklist (Saturday)
 
-1. **Fix outbound calls** (Known issue 1), then do a full test call that ends with the dispatch phone ringing and a slot being accepted.
+1. **Full end-to-end test:** call the line, report a leak in 3B, answer the dispatcher on the second phone and **accept a slot**. Check that the dashboard shows the booking and the timer stops. Outbound calls now connect, but a booking hasn't been completed yet.
 2. **Decide the demo cast:** who calls as the tenant (Kennedy or Tadiwa) and whose phone plays Jan. Update the tenant name and number and the contractor numbers in Supabase. Give Mila a different phone from Jan, so the fallback is visible.
 3. **Pick the deploy branch** (`dev` or `main`), merge, redeploy, then re-run `sync-agents.mjs` from it.
 4. **Twilio** for the confirmation text, and verify the demo phones in the trial.
