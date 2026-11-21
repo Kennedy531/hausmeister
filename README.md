@@ -4,6 +4,8 @@ An AI voice caretaker. A tenant calls; before the call ends, the agent has triag
 
 > "Tenants don't want a ticket number. They want the plumber booked."
 
+> **Current status, accounts and the morning checklist:** [`docs/STATUS.md`](docs/STATUS.md)
+
 ## Setup
 
 ```bash
@@ -42,7 +44,8 @@ Without Twilio or Vapi keys, SMS and the outbound call are logged instead of sen
 | `agents/` | Voice agent prompts and tool definitions (pushed with `scripts/sync-agents.mjs`) |
 | `supabase/` | Schema (incl. pattern rule, slot booking and reset as SQL functions) and demo seed data |
 | `scripts/` | `sync-agents`, `simulate-demo`, `fake-tool-call` |
-| `docs/TRACKS.md` | How the work is split between two people |
+| `docs/STATUS.md` | What is set up where, what works, known issues, next steps |
+| `docs/TRACKS.md` | The original two-track split (outdated) |
 
 ## Before the demo, check on a real call
 
