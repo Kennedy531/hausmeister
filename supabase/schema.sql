@@ -82,6 +82,8 @@ create table tickets (
   dispatch_attempts int not null default 0,
   tried_contractor_ids bigint[] not null default '{}',
   escalation_reason text,
+  available_from timestamptz,         -- "When are you home today?": tenant is home from
+  available_until timestamptz,        -- ... until (null = rest of the day)
   call_started_at timestamptz,        -- when the tenant's call began (for the on-screen timer)
   booked_at timestamptz,              -- when the contractor accepted a slot
   created_at timestamptz not null default now(),
@@ -219,7 +221,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Demo reset: run before every rehearsal (dashboard button or POST /api/demo/reset).
 -- Deletes every ticket created by calls, clears transcripts, re-anchors the seed
--- history to now and gives every contractor two fresh free slots today.
+-- history to now and gives every contractor three fresh free slots today (in 1, 3 and 6 hours).
 -- Tenants and contractors (with their real phones) are kept.
 -- ---------------------------------------------------------------------------
 create or replace function reset_demo()
@@ -240,7 +242,7 @@ begin
   select c.id,
          date_trunc('hour', now()) + make_interval(hours => h),
          date_trunc('hour', now()) + make_interval(hours => h + 2)
-  from contractors c, (values (2), (5)) as s(h);
+  from contractors c, (values (1), (3), (6)) as s(h);
   return json_build_object('tickets_removed', removed);
 end;
 $$;
