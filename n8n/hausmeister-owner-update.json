@@ -1,0 +1,188 @@
+{
+  "name": "Hausmeister: owner update after each booking",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hausmeister-booking",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8f1c2a10-0001-4c5e-9a10-000000000001",
+      "name": "Booking from Hausmeister",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "5d0f6a52-6c1e-4f4b-9b8e-hausmeister01"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !$env.N8N_WEBHOOK_SECRET || $json.headers['x-hausmeister-secret'] === $env.N8N_WEBHOOK_SECRET }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8f1c2a10-0002-4c5e-9a10-000000000002",
+      "name": "Secret matches?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "f1", "name": "ticket_id", "value": "={{ $json.body.ticket_id }}", "type": "number" },
+            { "id": "f2", "name": "building", "value": "={{ $json.body.building }}", "type": "string" },
+            { "id": "f3", "name": "unit", "value": "={{ $json.body.unit }}", "type": "string" },
+            { "id": "f4", "name": "stack", "value": "={{ $json.body.stack }}", "type": "string" },
+            { "id": "f5", "name": "issue_type", "value": "={{ $json.body.issue_type }}", "type": "string" },
+            { "id": "f6", "name": "urgency", "value": "={{ $json.body.urgency }}", "type": "string" },
+            { "id": "f7", "name": "summary", "value": "={{ $json.body.summary }}", "type": "string" },
+            { "id": "f8", "name": "contractor", "value": "={{ $json.body.contractor }}{{ $json.body.company ? ' (' + $json.body.company + ')' : '' }}", "type": "string" },
+            { "id": "f9", "name": "trade", "value": "={{ $json.body.trade }}", "type": "string" },
+            { "id": "f10", "name": "scheduled", "value": "={{ $json.body.scheduled }}", "type": "string" },
+            { "id": "f11", "name": "pattern", "value": "={{ $json.body.pattern }}", "type": "boolean" },
+            { "id": "f12", "name": "call_to_booked_seconds", "value": "={{ $json.body.call_to_booked_seconds }}", "type": "number" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8f1c2a10-0003-4c5e-9a10-000000000003",
+      "name": "Job details",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENAI_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4.1-mini', temperature: 0.3, messages: [ { role: 'system', content: 'You write short updates for a property owner about repairs in their building. Plain English, 2 or 3 sentences, no greeting or sign-off. Say what broke, how urgent it is, who is booked and when, and how fast it was handled. If pattern is true, add that it is a repeat issue in the same stack and worth a preventive inspection.' }, { role: 'user', content: JSON.stringify($json) } ] }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "8f1c2a10-0004-4c5e-9a10-000000000004",
+      "name": "OpenAI: write owner update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $('Job details').item.json.pattern }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8f1c2a10-0005-4c5e-9a10-000000000005",
+      "name": "Repeat issue in the stack?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "p1", "name": "owner_update", "value": "={{ $('OpenAI: write owner update').item.json.choices[0].message.content }}", "type": "string" },
+            { "id": "p2", "name": "follow_up", "value": "=Book a preventive inspection of the pipes in stack {{ $('Job details').item.json.stack }}: repeat {{ $('Job details').item.json.issue_type }} reports in the last 30 days.", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8f1c2a10-0006-4c5e-9a10-000000000006",
+      "name": "Flag preventive inspection",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1100, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "n1", "name": "owner_update", "value": "={{ $('OpenAI: write owner update').item.json.choices[0].message.content }}", "type": "string" },
+            { "id": "n2", "name": "follow_up", "value": "", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8f1c2a10-0007-4c5e-9a10-000000000007",
+      "name": "No follow-up needed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ owner_update: $json.owner_update, follow_up: $json.follow_up }) }}",
+        "options": {}
+      },
+      "id": "8f1c2a10-0008-4c5e-9a10-000000000008",
+      "name": "Send back to Hausmeister",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"unauthorised\"}",
+        "options": { "responseCode": 401 }
+      },
+      "id": "8f1c2a10-0009-4c5e-9a10-000000000009",
+      "name": "Reject (401)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [440, 420]
+    }
+  ],
+  "connections": {
+    "Booking from Hausmeister": { "main": [[{ "node": "Secret matches?", "type": "main", "index": 0 }]] },
+    "Secret matches?": {
+      "main": [
+        [{ "node": "Job details", "type": "main", "index": 0 }],
+        [{ "node": "Reject (401)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Job details": { "main": [[{ "node": "OpenAI: write owner update", "type": "main", "index": 0 }]] },
+    "OpenAI: write owner update": { "main": [[{ "node": "Repeat issue in the stack?", "type": "main", "index": 0 }]] },
+    "Repeat issue in the stack?": {
+      "main": [
+        [{ "node": "Flag preventive inspection", "type": "main", "index": 0 }],
+        [{ "node": "No follow-up needed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Flag preventive inspection": { "main": [[{ "node": "Send back to Hausmeister", "type": "main", "index": 0 }]] },
+    "No follow-up needed": { "main": [[{ "node": "Send back to Hausmeister", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

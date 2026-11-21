@@ -4,7 +4,7 @@ An AI voice caretaker. A tenant calls; before the call ends, the agent has triag
 
 > "Tenants don't want a ticket number. They want the plumber booked."
 
-> **Current status, accounts and the morning checklist:** [`docs/STATUS.md`](docs/STATUS.md) · **Live demo script:** [`docs/DEMO.md`](docs/DEMO.md) · **Partner connector spec (how we used OpenAI, ElevenLabs and Reltix):** [`docs/CONNECTORS.md`](docs/CONNECTORS.md)
+> **Current status, accounts and the morning checklist:** [`docs/STATUS.md`](docs/STATUS.md) · **Live demo script:** [`docs/DEMO.md`](docs/DEMO.md) · **Partner connector spec (how we used OpenAI, ElevenLabs, n8n and Reltix):** [`docs/CONNECTORS.md`](docs/CONNECTORS.md)
 
 ## Setup
 

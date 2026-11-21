@@ -6,6 +6,7 @@ How Hausmeister uses the products of the MAIN AI Hackathon partners, and how it 
 |---|---|---|
 | **OpenAI** | `gpt-4.1-mini` | The brain of both voice agents (triage, tool calls, booking) and the live English subtitles on the dashboard |
 | **ElevenLabs** | Turbo v2.5 voices | Every word the two agents say: Jessica for the caretaker, Eric for the dispatcher, in English, Dutch or German |
+| **n8n** | Workflow automation | After each booking, a workflow writes an update for the property owner and flags repeat issues for a preventive inspection |
 | **Reltix** (track) | centrix data model | The context the agent works from: tenant, flat, building, history, contractors. Mocked in Supabase for the demo |
 
 One call, end to end: the tenant phones the caretaker line → **OpenAI** triages and creates the ticket while **ElevenLabs** speaks → the agent phones the plumber → the dispatcher (OpenAI + ElevenLabs again) books a time → the tenant gets an email, and the dashboard shows every step with **OpenAI** subtitles.
@@ -68,6 +69,38 @@ Why these choices:
 - **Turbo v2.5.** Our first version used a Flash model and sounded robotic on the phone. Turbo v2.5 sounds far more natural and is still fast enough for live turn-taking.
 - **Multilingual.** The same voice speaks English, Dutch and German, so the dispatcher can open in Dutch and switch to English mid-call without changing voice.
 - **Lower stability (0.4).** More expressive and less monotone; speaker boost keeps it close to the original voice.
+
+---
+
+## n8n
+
+The voice agents handle the call. What should happen *after* a booking (who gets told, what gets logged, what follow-up is needed) is a business process that changes per property manager, so it lives in n8n where the operations team can change it without touching the agent code.
+
+**Workflow: "Hausmeister: owner update after each booking"** ([`n8n/hausmeister-owner-update.json`](../n8n/hausmeister-owner-update.json), import it into any n8n instance)
+
+![The n8n workflow in the editor](../n8n/n8n-workflow.png)
+
+| # | Node | What it does |
+|---|---|---|
+| 1 | **Booking from Hausmeister** (Webhook) | Receives every booked job from the app: ticket, flat, stack, issue, urgency, contractor, time, pattern flag, seconds from call to booking |
+| 2 | **Secret matches?** (IF) | Checks the `X-Hausmeister-Secret` header; anything else gets **Reject (401)** |
+| 3 | **Job details** (Set) | Pulls the fields out of the request |
+| 4 | **OpenAI: write owner update** (HTTP Request) | `gpt-4.1-mini` writes a 2–3 sentence update for the property owner: what broke, how urgent, who's booked and when, how fast it was handled |
+| 5 | **Repeat issue in the stack?** (IF) | If the pattern rule fired (repeat issue in the same stack within 30 days)… |
+| 6 | **Flag preventive inspection** / **No follow-up needed** (Set) | …adds a follow-up: book a preventive inspection of that stack's pipes |
+| 7 | **Send back to Hausmeister** (Respond to Webhook) | Returns `owner_update` and `follow_up`; the app logs both on the ticket |
+
+**How the app calls it.** When `confirm_slot` books a job, the app posts the booking to the workflow's webhook ([`src/lib/n8n.ts`](../src/lib/n8n.ts)). It runs with Next.js `after()`, so it starts only once the dispatcher already has its answer and never slows down the call. It's off unless `N8N_WEBHOOK_URL` is set, and a failure in n8n never affects the booking.
+
+**Tested run.** We sent it the booking from a real test call (ticket 1015). Every node succeeded in 2.2 seconds:
+
+![A successful run of the workflow](../n8n/n8n-workflow-run.png)
+
+> **owner_update:** "There is an urgent water leak next to the lights in unit 3B of Building B. Jan from Schulte Plumbing is booked to fix it today between 12:00 and 14:00, and the issue was handled quickly, with only 48 seconds from call to booking. Since this is a repeat leak in stack B, a preventive inspection is recommended."
+>
+> **follow_up:** "Book a preventive inspection of the pipes in stack B: repeat leak reports in the last 30 days."
+
+**Status.** Built and tested on n8n running locally. It isn't connected to the live demo, which runs on Vercel and can't reach a local n8n. To go live: import the JSON into n8n Cloud (the hackathon's Cloud Pro licence), replace the `Authorization` header with an n8n OpenAI credential, publish it, and set `N8N_WEBHOOK_URL` (and `N8N_WEBHOOK_SECRET`) on Vercel. Natural next nodes: an email or Slack message to the owner, and a row in a maintenance log sheet.
 
 ---
 
