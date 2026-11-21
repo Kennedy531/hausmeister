@@ -24,16 +24,19 @@ export async function ticketEvent(ticketId: number, kind: string, message: strin
   if (error) console.error("ticket_events insert failed", error.message);
 }
 
-/** Adds a line to the live transcript panel. Never throws. */
+/** Adds a line to the live transcript panel and returns its id. Never throws. */
 export async function callEvent(e: {
   callId: string;
   agent: "tenant" | "dispatcher";
   role: "user" | "assistant" | "system" | "tool";
   text: string;
   ticketId?: number | null;
-}) {
-  const { error } = await db()
+}): Promise<number | null> {
+  const { data, error } = await db()
     .from("call_events")
-    .insert({ call_id: e.callId, agent: e.agent, role: e.role, text: e.text, ticket_id: e.ticketId ?? null });
+    .insert({ call_id: e.callId, agent: e.agent, role: e.role, text: e.text, ticket_id: e.ticketId ?? null })
+    .select("id")
+    .single();
   if (error) console.error("call_events insert failed", error.message);
+  return (data as { id: number } | null)?.id ?? null;
 }

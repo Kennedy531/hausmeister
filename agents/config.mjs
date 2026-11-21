@@ -36,6 +36,7 @@ export const dispatcherTools = [
 ];
 
 export function buildAssistants(env) {
+  // --only=tenant or --only=dispatcher syncs just one agent (see scripts/sync-agents.mjs).
   const server = {
     url: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/api/vapi`,
     headers: { "X-Vapi-Secret": env.VAPI_WEBHOOK_SECRET },
@@ -70,7 +71,7 @@ export function buildAssistants(env) {
     dispatcher: {
       name: "Hausmeister Dispatcher",
       firstMessage:
-        "{% if language == 'de' %}Hallo {{ contractor_name }}, hier ist Hausmeister mit einem Auftrag in {{ building }}. Haben Sie kurz Zeit?{% else %}Hi {{ contractor_name }}, this is Hausmeister calling about a job at {{ building }}. Have you got a moment?{% endif %}",
+        "{% if language == 'de' %}Hallo {{ contractor_name }}, hier ist Hausmeister mit einem Auftrag in {{ building }}. Haben Sie kurz Zeit?{% elsif language == 'nl' %}Hoi {{ contractor_name }}, met Hausmeister. Ik bel over een klus in {{ building }}. Heeft u even?{% else %}Hi {{ contractor_name }}, this is Hausmeister calling about a job at {{ building }}. Have you got a moment?{% endif %}",
       model: model(read("./dispatcher/prompt.md"), dispatcherTools),
       voice,
       transcriber,

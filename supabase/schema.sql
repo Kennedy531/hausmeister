@@ -37,7 +37,7 @@ create table tenants (
   unit_id bigint not null references units(id) on delete cascade,
   name text not null,
   phone text not null unique,         -- E.164, e.g. +31612345678
-  language text not null default 'en' check (language in ('en', 'de'))
+  language text not null default 'en' check (language in ('en', 'de', 'nl'))
 );
 
 create table contractors (
@@ -48,7 +48,7 @@ create table contractors (
   phone text not null,
   rating numeric(2,1) not null,
   hourly_rate_eur int not null,
-  language text not null default 'en' check (language in ('en', 'de'))
+  language text not null default 'en' check (language in ('en', 'de', 'nl'))
 );
 
 create table contractor_slots (
@@ -110,6 +110,8 @@ create table call_events (
   agent text not null check (agent in ('tenant', 'dispatcher')),
   role text not null check (role in ('user', 'assistant', 'system', 'tool')),
   text text not null,
+  lang text,                          -- detected language of the line
+  translation text,                   -- English translation, when the line isn't English
   ticket_id bigint references tickets(id) on delete set null,
   created_at timestamptz not null default now()
 );
