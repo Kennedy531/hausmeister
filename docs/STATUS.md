@@ -1,6 +1,6 @@
 # Hausmeister: setup and status
 
-Last updated: Saturday 21 November 2026, about 01:50 (Amsterdam time), after the first complete booking over real phones.
+Last updated: Saturday 21 November 2026, about 10:00 (Amsterdam time), after adding the confirmation email. Judging is at 10:30. The stage script is in [`docs/DEMO.md`](DEMO.md).
 
 This is the one place that says what is set up where, what has been proven to work, what is broken, and what is left before the demo. Secrets and phone numbers are **not** in this file: they live in each person's `.env.local`, in Vercel and in the Supabase database.
 
@@ -46,7 +46,8 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 
 ### Vercel: project `hausmeister` (account `kennedy531`, Hobby)
 - Domain: `hausmeister-green.vercel.app`.
-- 17 environment variables: the Supabase URL and keys, OpenAI, Vapi key, phone number id, both assistant ids, webhook secret, voice and model settings, dashboard admin key, time zone and `PUBLIC_BASE_URL`.
+- 20 environment variables: the Supabase URL and keys, OpenAI, Vapi key, phone number id, both assistant ids, webhook secret, voice and model settings, dashboard admin key, time zone, `PUBLIC_BASE_URL`, and the email settings `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `CONFIRMATION_EMAIL_TO`. (`OPENAI_VISION_MODEL` is still there but unused since the photo removal.)
+- Production deploys automatically from every push to `main`.
 - The production deploy was made from `dev` by another Claude session ("by claude"), then redeployed to pick up the assistant ids. **Whoever deploys last decides what is live.**
 - Redeploying from the Vercel dashboard asks for Kennedy's two-factor code.
 - The secrets were saved as type "Config", so anyone added to the project can read them. Fine on a personal account.
@@ -78,6 +79,11 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 - Outbound calls authentication: **IP Addresses**, `44.229.228.186` and `44.238.177.138` (Vapi's US SIP servers), IP authentication method **Tech Prefix `7391`**. No SIP password is involved.
 - Outbound voice profile **"Default"** (Global, rate deck), attached to the Kyrix connection. Allowed destinations: North America (as before) plus **Netherlands +31** and **Germany +49**.
 - Debugging → SIP Call Flow Tool shows every call with its SIP reason. It's the quickest way to see why a call failed.
+
+### Gmail: booking confirmation email
+- Sends from **kennedyf531@gmail.com** with a Google **app password** named "demo" (Google Account → Security → App passwords). Revoke it there after the hackathon.
+- All tenant confirmations go to `CONFIRMATION_EMAIL_TO` (currently the same address), since there's one demo tenant. Real tenants would need an email column on `tenants`.
+- Code: `src/lib/email.ts`, called from `confirm_slot` in `src/lib/tools/index.ts`. A failed email never breaks the call; it's logged on the ticket as "Tenant email not sent".
 
 ### Twilio (SMS): tried, not used for the demo
 - A trial account exists, and its account id, token and number are in Kennedy's `.env.local`. They are **not** in Vercel, so the live app logs texts instead of sending them.
@@ -123,14 +129,14 @@ The carrier forwards the number to the SIP Direct entry, which still had the Fys
 ## What's left before the demo
 
 ### Must do
-1. ~~Twilio for texts~~: dropped for the demo (see the Twilio section). On stage, point at "Tenant notified" on the dashboard and say it goes out by SMS in production.
-2. **Demo cast and numbers.** Decide who calls as the tenant (the plan says Tadiwa), then in Supabase:
+1. **One full test call of the final flow** (nothing since the availability question, the photo removal and the email): Reset demo, call from **…9862**, report a leak in 3B, say when you're home, accept the time on **…7117**, then check the timer stops, "Confirmation emailed" shows, and the email arrives.
+2. **Demo cast and numbers.** Right now the tenant is Kennedy (…9862 and …7117) and every contractor rings …7117. If others play the roles, update Supabase:
    - put the right name and number on the 3B tenant
    - Jan → Emmanuel's phone, Mila → a spare phone (so the fallback is visible), and the other contractors back to something sensible
    - decide Jan's language: Dutch with English subtitles on the dashboard, or English
    - set `ONCALL_MANAGER_PHONE` (local and Vercel).
-3. **One branch, one deploy.** Agree with Tadiwa which branch is final, run migration 002 if it's `dev`, merge into `main`, redeploy, then re-run `sync-agents.mjs` from that code.
-4. **Rehearse 5 or more times in the hall** (Reset before each), test in the noise, record the backup video around 08:30, code freeze at 09:00.
+3. **Keep `main` as the one branch.** It's what's live. Any last change: push to `main` (auto-deploys), and run `sync-agents.mjs` if a prompt changed.
+4. **Rehearse 2–3 times in the hall** (Reset before each), test in the noise, and **record the backup video** (no recording exists yet; see `demo-video/STORYBOARD.md`).
 
 ### Test once
 5. ~~Photo moment~~: removed.
