@@ -17,11 +17,10 @@ Cards: the PNGs in this folder (1920×1080). Edit text in `cards.html`, re-rende
 ## Captions during the live run (one line each, bottom of screen)
 1. Caller recognised by phone number
 2. Two triage questions
-3. Photo checked by the vision model (if in the run)
-4. **Building history: third leak in this stack, plumber goes to 4B first**
-5. "When are you home today?": only matching slots are offered
-6. AI dispatcher phones the plumber (in Dutch, live English subtitles)
-7. Booked, tenant and neighbour texted. Timer stops.
+3. **Building history: third leak in this stack, plumber goes to 4B first**
+4. "When are you home today?": only matching slots are offered
+5. AI dispatcher phones the plumber (in Dutch, live English subtitles)
+6. Booked, tenant and neighbour notified (SMS in production). Timer stops.
 
 ## Recording the live run
 - Reset the demo, open the dashboard with `?stage=1`, full screen, 1080p.

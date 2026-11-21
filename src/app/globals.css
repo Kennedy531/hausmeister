@@ -214,12 +214,6 @@ button:disabled { cursor: default; opacity: .5; }
 .ui-kv-compact dt, .ui-kv-compact dd { min-height: 0; padding: 6px 0; font-size: 12.5px; }
 .ui-kv-compact { grid-template-columns: 80px minmax(0, 1fr); border-top: 1px solid var(--border); margin: 0; }
 
-/* photo */
-.ui-photo { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; line-height: 1.45; }
-.ui-photo img, .ui-photo-ph { width: 96px; height: 72px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border); }
-.ui-photo-ph { display: grid; place-items: center; background: var(--bg-raised); color: var(--text-3); }
-.ui-advice { display: flex; gap: 6px; align-items: flex-start; margin-top: 8px; color: var(--warning); font-size: 13px; }
-.ui-advice .ui-icon { margin-top: 3px; }
 
 /* building map */
 .ui-map { display: grid; gap: 6px; }
@@ -285,12 +279,6 @@ button:disabled { cursor: default; opacity: .5; }
 .ui-translation { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-strong); color: var(--info); font-size: 14px; animation: ui-in .3s ease-out; }
 .ui-msg.is-user .ui-translation { color: #1f5fae; border-top-color: #c9c9cf; }
 .ui-translation-label { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; opacity: .8; margin-bottom: 2px; }
-
-/* ---------- photo page (tenant's phone) ---------- */
-.hm-muted { color: var(--text-2); }
-.hm-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-.hm-booked { background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(62, 207, 142, .35); border-radius: var(--radius); padding: 14px; font-weight: 500; }
-.hm-escalated { background: var(--danger-soft); color: var(--danger); border: 1px solid rgba(242, 85, 90, .35); border-radius: var(--radius); padding: 14px; }
 
 /* ---------- stage mode (?stage=1): projector and demo video ---------- */
 .ui-app.is-stage { grid-template-columns: minmax(0, 1fr); }

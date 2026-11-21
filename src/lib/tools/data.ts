@@ -8,9 +8,6 @@ export interface TicketFull {
   urgency: Urgency;
   status: TicketStatus;
   summary: string;
-  photo_path: string | null;
-  photo_assessment: string | null;
-  photo_safety_advice: string | null;
   pattern_flag: boolean;
   pattern_note: string | null;
   contractor_id: number | null;

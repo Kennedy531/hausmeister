@@ -1,4 +1,4 @@
-// OWNED BY TRACK B. Used for the photo link, the tenant's booking confirmation and emergency alerts.
+// OWNED BY TRACK B. Used for the tenant's booking confirmation, the neighbour access text and emergency alerts.
 
 /**
  * Sends an SMS through the Twilio REST API (no SDK).
