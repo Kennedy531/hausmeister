@@ -21,7 +21,7 @@ This is the one place that says what is set up where, what has been proven to wo
 | Photo upload with vision | ❔ Not tested live (needs SMS for the link) |
 | Emergency path (gas, fire) | ❔ Not tested live |
 | German tenant call | Not needed: the demo is English and Maastricht-based now (German still works if a caller speaks it) |
-| Tenant availability ("when are you home?") | 🚧 On `dev` only: needs migration 002 and an agent sync before it can go live |
+| Tenant availability ("when are you home?") | ✅ Live since Saturday morning: deployed from `main`, migration 002 run, agents synced. Not yet tried on a real call |
 
 Measured call costs (from Vapi, Friday night tests): tenant call about **$0.07**, dispatcher call about **$0.05–0.09**. Useful for the "what does a call cost?" question.
 
@@ -52,7 +52,7 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 
 ### Supabase: project `hausmeister` (ref `emwupfxksbozowyznkrb`, West EU / Paris, free plan)
 - Applied: `supabase/schema.sql` + `supabase/seed.sql`, then `supabase/migrations/001_dutch_and_translation.sql`.
-- **Not applied yet:** `supabase/migrations/002_tenant_availability.sql` (on `dev`).
+- Also applied: `supabase/migrations/002_tenant_availability.sql` (tenant time window, three slots per contractor a day).
 - `schema.sql` grants the API roles table access itself, because new Supabase projects no longer do that automatically.
 - **The demo building is in Maastricht** (Building B, Maasboulevard 7, mock address). All tenants are English-speaking, placeholder numbers are +31, and contractor companies have English and Dutch names (Schulte Plumbing, Brandt Electric, Maas Locksmiths, Okafor Home Services, Maas Pipe Services). This is in both the live database and `supabase/seed.sql`.
 - **Demo data changed by hand** (not in the seed files):
@@ -65,7 +65,7 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 - Assistants, created and updated by `node scripts/sync-agents.mjs`:
   - `Hausmeister Tenant Line`: `03c11232-38a7-464f-ad9c-006de9ebe689`
   - `Hausmeister Dispatcher`: `c197990d-ebf1-4e1f-ae3d-b95947193b14`
-- Last synced from `main` at about 01:45, including the language-following and "ask again" prompt changes. `dev`'s newer prompts are **not** synced yet.
+- Last synced from `main` on Saturday at about 09:05: language-following, "ask again" and the tenant availability question.
 - Voice: ElevenLabs `eleven_flash_v2_5`, voice `sarah`. Model: `gpt-4.1-mini`. Transcriber: Deepgram `nova-3`, `multi` (understands English, German and Dutch).
 - The Dutch number has **two** Vapi entries, and both point at the webhook with no fixed assistant:
   - `4e36f1a0-…` "Fysio Receptie (SIP)": the BYO number entry. It is `VAPI_PHONE_NUMBER_ID`, used for **outbound** dispatcher calls. `sync-agents.mjs` updates this one.
@@ -82,9 +82,9 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 - **Twilio** (SMS): account SID, auth token and sending number (`scripts/set-env.sh TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER`, then the same three in Vercel and a redeploy).
 - `ONCALL_MANAGER_PHONE`, `DEMO_NEIGHBOUR_PHONE`, `NEXT_PUBLIC_TYPICAL_RESPONSE`.
 
-## Pending on `dev`: tenant availability
+## Tenant availability (now live)
 
-Tadiwa's latest `dev` commits make the tenant agent ask *"When are you home today?"* and only offer and book contractor slots in that window (three slots per contractor a day). Before this goes live, in this order:
+Tadiwa's commits make the tenant agent ask *"When are you home today?"* and only offer and book contractor slots in that window (three slots per contractor a day). Rollout steps, all done by Saturday ~09:05 (keep this order for any future migration):
 1. Run `supabase/migrations/002_tenant_availability.sql` in the Supabase SQL editor. **Do this before deploying**, or the new code will likely fail when it writes tickets or slots.
 2. Merge `dev` into `main` and deploy.
 3. Run `node scripts/sync-agents.mjs` from that same code, so the prompts match.
