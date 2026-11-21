@@ -156,7 +156,6 @@ export const tools: ToolHandlers = {
 
     const t = await getTicket(ticketId);
     const name = t?.contractor?.name ?? "The contractor";
-    const visitFirst = t?.visit_unit?.label;
     await ticketEvent(ticketId, "booked", `${name} booked for ${formatSlot(res.scheduled_at!, res.ends_at!, "en")}`);
 
     // The tenant is told by email (texts are off for the demo).
@@ -175,8 +174,6 @@ export const tools: ToolHandlers = {
         contractorCompany: t.contractor?.company ?? null,
         trade: t.contractor?.trade ?? "contractor",
         when: formatSlot(res.scheduled_at!, res.ends_at!, "en"),
-        visitFirst: visitFirst ?? null,
-        patternNote: null,
       });
       const r = await sendEmail({ to, ...mail });
       emailSent = r.sent;
