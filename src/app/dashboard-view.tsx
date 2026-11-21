@@ -123,6 +123,7 @@ export default function DashboardView() {
   const { state, error, load } = useDashboard();
   const now = useNow();
   const [adminKey, setAdminKey] = useState<string | null>(null);
+  const [stage, setStage] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
@@ -130,6 +131,13 @@ export default function DashboardView() {
     const params = new URLSearchParams(window.location.search);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL
     setAdminKey(params.get("key") ?? (params.has("admin") ? "" : null));
+    // ?stage=1: projector / video mode. Bigger, no sidebar, no admin buttons. Press S to toggle.
+    setStage(params.has("stage"));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === "s" && !(e.target instanceof HTMLInputElement)) setStage((v) => !v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const view = useMemo(() => {
@@ -188,7 +196,7 @@ export default function DashboardView() {
   );
 
   return (
-    <div className="ui-app">
+    <div className={`ui-app ${stage ? "is-stage" : ""}`}>
       <Sidebar
         state={state}
         callTickets={callTickets}
@@ -215,7 +223,7 @@ export default function DashboardView() {
                 <Icon name="arrowLeft" size={14} /> Back to live
               </button>
             )}
-            {adminKey !== null && ticket?.status === "open" && !viewingPast && (
+            {adminKey !== null && !stage && ticket?.status === "open" && !viewingPast && (
               <button className="ui-btn" disabled={busy} onClick={() => admin("/api/demo/dispatch", { ticket_id: ticket.id })}>
                 <Icon name="phone" size={14} /> Dispatch manually
               </button>
