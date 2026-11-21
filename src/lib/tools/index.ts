@@ -4,7 +4,9 @@
 import type { ToolHandlers } from "./types";
 import { TRADE_FOR_ISSUE, type IssueType, type Urgency } from "@/lib/contract";
 import { db, must, ticketEvent } from "@/lib/db";
+import { after } from "next/server";
 import { bookingEmail, sendEmail, tenantEmailAddress } from "@/lib/email";
+import { n8nConfigured, sendBookingToN8n, type BookingForN8n } from "@/lib/n8n";
 import { formatSlot, formatWindow, startsInWindow } from "@/lib/time";
 import {
   buildingContext,
@@ -178,6 +180,26 @@ export const tools: ToolHandlers = {
       const r = await sendEmail({ to, ...mail });
       emailSent = r.sent;
       await ticketEvent(ticketId, "email", r.sent ? `Tenant emailed: "${mail.subject}"` : `Tenant email not sent (${r.error})`);
+    }
+
+    // Owner update and follow-up through the n8n workflow, after the dispatcher has its answer.
+    if (t && n8nConfigured()) {
+      const booking: BookingForN8n = {
+        ticket_id: ticketId,
+        building: t.unit.building.name,
+        unit: t.unit.label,
+        stack: t.unit.stack,
+        issue_type: t.issue_type,
+        urgency: t.urgency,
+        summary: t.summary,
+        contractor: name,
+        company: t.contractor?.company ?? null,
+        trade: t.contractor?.trade ?? "contractor",
+        scheduled: formatSlot(res.scheduled_at!, res.ends_at!, "en"),
+        pattern: t.pattern_flag,
+        call_to_booked_seconds: t.call_started_at ? Math.round((Date.now() - Date.parse(t.call_started_at)) / 1000) : null,
+      };
+      after(() => sendBookingToN8n(booking));
     }
     return {
       confirmed: true,
