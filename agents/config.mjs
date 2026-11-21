@@ -23,7 +23,12 @@ export const tenantTools = [
   }, ["unit", "issue_type", "urgency", "summary"]),
   fn("send_photo_link", "Text the tenant a link to upload a photo of the damage.", { ticket_id: TICKET }, ["ticket_id"]),
   fn("check_photo", "Check whether the tenant's photo has arrived and get the assessment.", { ticket_id: TICKET }, ["ticket_id"]),
-  fn("dispatch_contractor", "Phone the best available contractor for this ticket. The tenant call can end after this.", { ticket_id: TICKET, trade: TRADE }, ["ticket_id", "trade"]),
+  fn("dispatch_contractor", "Phone the best available contractor for this ticket, offering only slots when the tenant is home. The tenant call can end after this.", {
+    ticket_id: TICKET,
+    trade: TRADE,
+    available_from: { type: "string", description: "When the tenant is home from, today, as 24-hour HH:MM (e.g. 'after six' = 18:00). Leave out if any time or right now." },
+    available_until: { type: "string", description: "Until when the tenant is home, as 24-hour HH:MM. Leave out if they didn't say." },
+  }, ["ticket_id", "trade"]),
   { type: "endCall" },
 ];
 

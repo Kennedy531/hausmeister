@@ -22,6 +22,9 @@ export interface TicketFull {
   tried_contractor_ids: number[];
   call_started_at: string | null;
   booked_at: string | null;
+  /** Missing until supabase/migrations/002 has been run. */
+  available_from?: string | null;
+  available_until?: string | null;
   unit: { id: number; label: string; floor: number; stack: string; building: Building };
   visit_unit: { label: string } | null;
   tenant: { id: number; name: string; phone: string; language: Language } | null;
