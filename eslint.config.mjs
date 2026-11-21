@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Title-card renderer for the demo video (a Playwright script, not app code).
+    "demo-video/**",
   ]),
 ]);
 

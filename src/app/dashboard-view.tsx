@@ -551,7 +551,13 @@ function Impact({ ticket, tickets, serverNow }: { ticket: Ticket; tickets: Ticke
       ).length
     : 0;
   const cost = ticket.events.filter((e) => e.kind === "cost").reduce((sum, e) => sum + (Number(e.message.split(" ")[1]) || 0), 0);
-  const notified = 1 + (ticket.events.some((e) => e.kind === "neighbour" || e.kind === "access") ? 1 : 0);
+  // Only count residents a message actually reached.
+  const tenantReached = ticket.events.some(
+    (e) => (e.kind === "email" && e.message.startsWith("Tenant emailed")) || (e.kind === "sms" && e.message.startsWith("Tenant texted")),
+  );
+  const neighbourReached = ticket.events.some((e) => e.kind === "access" || (e.kind === "neighbour" && !e.message.includes("not texted")));
+  const notified = (tenantReached ? 1 : 0) + (neighbourReached ? 1 : 0);
+  const notifiedNote = [tenantReached && "Caller", neighbourReached && "neighbour"].filter(Boolean).join(" + ") || undefined;
   const langs = [...new Set(["en", ticket.contractor_language ?? "en"])].map((l) => l.toUpperCase()).join(" → ");
   const typical = process.env.NEXT_PUBLIC_TYPICAL_RESPONSE;
   return (
@@ -560,7 +566,7 @@ function Impact({ ticket, tickets, serverNow }: { ticket: Ticket; tickets: Ticke
       <div className="ui-impact-grid">
         <Stat value={seconds !== null ? fmtDuration(seconds) : "—"} label="Call to plumber booked" note={typical ? `Typical: ${typical}` : undefined} />
         <Stat value={String(covered)} label={covered === 1 ? "Extra visit saved" : "Extra visits saved"} note={covered > 0 ? `${covered + 1} reports, 1 visit` : undefined} />
-        <Stat value={String(notified)} label="Residents notified" note={notified > 1 ? "Caller + neighbour" : "Caller"} />
+        <Stat value={String(notified)} label={notified === 1 ? "Resident notified" : "Residents notified"} note={notifiedNote} />
         <Stat value={cost > 0 ? `$${cost.toFixed(2)}` : langs} label={cost > 0 ? "Cost of the calls" : "Languages"} note={cost > 0 ? langs : undefined} />
       </div>
     </section>
