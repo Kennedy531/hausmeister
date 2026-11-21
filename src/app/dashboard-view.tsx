@@ -300,7 +300,6 @@ export default function DashboardView() {
               {ticket?.contractor_name ? (
                 <>
                   <ContractorRow ticket={ticket} />
-                  <NeighbourRow ticket={ticket} />
                 </>
               ) : (
                 <Empty icon="wrench" text={ticket ? "No contractor called yet." : "Nothing to dispatch."} />
@@ -425,7 +424,6 @@ const ACTIVITY = [
   { key: "dispatch", label: "Contractor called", icon: "phone" },
   { key: "booked", label: "Slot booked", icon: "calendar" },
   { key: "sms", label: "Tenant notified", icon: "send" },
-  { key: "neighbour", label: "Neighbour asked for access", icon: "key" },
 ] as const;
 
 function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | null; tenantLines: CallEvent[]; startedAt: string | null; live: boolean }) {
@@ -455,16 +453,6 @@ function Activity({ ticket, tenantLines, startedAt, live }: { ticket: Ticket | n
         : { at: smsEvent.created_at, detail: "SMS not configured", state: "warn" }
       : {},
   };
-  const accessEv = ev("access");
-  const askedEv = ev("neighbour");
-  const notSent = Boolean(askedEv?.message.includes("not texted"));
-  steps.neighbour = accessEv
-    ? { at: accessEv.created_at, detail: accessEv.message, state: "done" }
-    : askedEv
-      ? { at: askedEv.created_at, detail: notSent ? "SMS not configured" : "Waiting for reply", state: notSent ? "warn" : "done" }
-      : ev("booked") && (!ticket?.visit_first || ticket.visit_first === ticket.unit)
-        ? { state: "skip", detail: "Not needed" }
-        : {};
   const firstOpen = ACTIVITY.findIndex((a) => !steps[a.key].state);
   const base = startedAt ? Date.parse(startedAt) : null;
 
@@ -521,24 +509,6 @@ function ContractorRow({ ticket }: { ticket: Ticket }) {
   );
 }
 
-function NeighbourRow({ ticket }: { ticket: Ticket }) {
-  const access = ticket.events.find((e) => e.kind === "access");
-  const asked = ticket.events.find((e) => e.kind === "neighbour");
-  const shown = access ?? asked;
-  if (!shown) return null;
-  const notSent = !access && shown.message.includes("not texted");
-  return (
-    <div className="ui-neighbour">
-      <span className="ui-neighbour-icon"><Icon name="key" size={14} /></span>
-      <div className="ui-contractor-body">
-        <div>Access to {ticket.visit_first}</div>
-        <div className="ui-subtle">{shown.message}</div>
-      </div>
-      {access ? <Badge tone="success">Confirmed</Badge> : notSent ? <Badge tone="warning">Not sent</Badge> : <Badge tone="info" pulse>Awaiting reply</Badge>}
-    </div>
-  );
-}
-
 /** Shown once the job is booked: the business case in four numbers. */
 function Impact({ ticket, tickets, serverNow }: { ticket: Ticket; tickets: Ticket[]; serverNow: string }) {
   const start = ticket.call_started_at ? Date.parse(ticket.call_started_at) : null;
@@ -551,7 +521,7 @@ function Impact({ ticket, tickets, serverNow }: { ticket: Ticket; tickets: Ticke
       ).length
     : 0;
   const cost = ticket.events.filter((e) => e.kind === "cost").reduce((sum, e) => sum + (Number(e.message.split(" ")[1]) || 0), 0);
-  const notified = 1 + (ticket.events.some((e) => e.kind === "neighbour" || e.kind === "access") ? 1 : 0);
+  const emailed = ticket.events.some((e) => e.kind === "email" && e.message.startsWith("Tenant emailed"));
   const langs = [...new Set(["en", ticket.contractor_language ?? "en"])].map((l) => l.toUpperCase()).join(" → ");
   const typical = process.env.NEXT_PUBLIC_TYPICAL_RESPONSE;
   return (
@@ -560,7 +530,7 @@ function Impact({ ticket, tickets, serverNow }: { ticket: Ticket; tickets: Ticke
       <div className="ui-impact-grid">
         <Stat value={seconds !== null ? fmtDuration(seconds) : "—"} label="Call to plumber booked" note={typical ? `Typical: ${typical}` : undefined} />
         <Stat value={String(covered)} label={covered === 1 ? "Extra visit saved" : "Extra visits saved"} note={covered > 0 ? `${covered + 1} reports, 1 visit` : undefined} />
-        <Stat value={String(notified)} label="Residents notified" note={notified > 1 ? "Caller + neighbour" : "Caller"} />
+        <Stat value={emailed ? "Sent" : "—"} label="Confirmation email" note={emailed ? "Plumber, time and ticket" : undefined} />
         <Stat value={cost > 0 ? `$${cost.toFixed(2)}` : langs} label={cost > 0 ? "Cost of the calls" : "Languages"} note={cost > 0 ? langs : undefined} />
       </div>
     </section>

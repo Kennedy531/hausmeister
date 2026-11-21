@@ -17,7 +17,6 @@ import {
   patternNote,
 } from "./data";
 import { dispatchTicket, escalate, windowFrom } from "./dispatch";
-import { notifyNeighbour } from "./neighbour";
 
 const ISSUES: IssueType[] = ["leak", "heating", "electrical", "lock", "appliance", "pest", "other"];
 const URGENCIES: Urgency[] = ["emergency", "urgent", "normal"];
@@ -202,13 +201,12 @@ export const tools: ToolHandlers = {
         trade: t.contractor?.trade ?? "contractor",
         when: formatSlot(res.scheduled_at!, res.ends_at!, "en"),
         visitFirst: visitFirst ?? null,
-        patternNote: t.pattern_flag ? t.pattern_note : null,
+        patternNote: null,
       });
       const r = await sendEmail({ to, ...mail });
       emailSent = r.sent;
       await ticketEvent(ticketId, "email", r.sent ? `Tenant emailed: "${mail.subject}"` : `Tenant email not sent (${r.error})`);
     }
-    if (t) await notifyNeighbour(t, res.scheduled_at!, res.ends_at!);
     return {
       confirmed: true,
       scheduled_at: res.scheduled_at!,

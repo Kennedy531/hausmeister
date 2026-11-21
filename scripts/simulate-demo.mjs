@@ -5,7 +5,6 @@
 //   WEBHOOK_BASE_URL=https://x.vercel.app node scripts/simulate-demo.mjs
 //   node scripts/simulate-demo.mjs --fast       (no pauses)
 //   node scripts/simulate-demo.mjs --no-answer  (Jan misses the call -> Mila is called)
-import { createHmac } from "node:crypto";
 import { env } from "./env.mjs";
 
 const base = env.WEBHOOK_BASE_URL ?? "http://localhost:3000";
@@ -100,20 +99,5 @@ await send({ type: "status-update", status: "ended", call: dispatcherCall });
 // What Vapi reports when each call ends (cost in USD), for the impact card.
 await send({ type: "end-of-call-report", endedReason: "customer-ended-call", cost: 0.21, call: tenantCall });
 await send({ type: "end-of-call-report", endedReason: "assistant-ended-call", cost: 0.14, call: dispatcherCall });
-
-// The neighbour in 4B replies YES to the access text (signed like Twilio does it).
-if (env.TWILIO_AUTH_TOKEN && env.DEMO_NEIGHBOUR_PHONE) {
-  await wait(4);
-  const url = `${(env.PUBLIC_BASE_URL ?? base).replace(/\/$/, "")}/api/sms/inbound`;
-  const params = { From: env.DEMO_NEIGHBOUR_PHONE, Body: "YES" };
-  const signed = Object.keys(params).sort().reduce((acc, k) => acc + k + params[k], url);
-  const signature = createHmac("sha1", env.TWILIO_AUTH_TOKEN).update(signed).digest("base64");
-  const r = await fetch(`${base}/api/sms/inbound`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": signature },
-    body: new URLSearchParams(params),
-  });
-  console.log("   neighbour replied YES ->", r.status, (await r.text()).slice(0, 120));
-}
 
 console.log("6. Loop closed:", booked.confirmed ? "booked" : booked.message);
