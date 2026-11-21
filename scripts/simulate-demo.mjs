@@ -68,7 +68,14 @@ await say(tenantCall, "assistant", ctx.pattern_note || "No similar reports in yo
 await wait(4);
 
 console.log("5. It calls the contractor");
-const d = await tool(tenantCall, "dispatch_contractor", { ticket_id: ticket.ticket_id, trade: "plumber" });
+// "When are you home today?" The tenant is home from about 2.5 hours from now, so the
+// earliest slot (in 1 hour) is filtered out and only the later ones are offered.
+const homeFrom = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit", hour12: false })
+  .format(new Date(Math.ceil((Date.now() + 2.5 * 3600e3) / 3600e3) * 3600e3));
+await say(tenantCall, "assistant", "When are you home today?");
+await wait(2);
+await say(tenantCall, "user", `From ${homeFrom}.`);
+const d = await tool(tenantCall, "dispatch_contractor", { ticket_id: ticket.ticket_id, trade: "plumber", available_from: homeFrom });
 if (!d.started) throw new Error(d.message);
 await say(tenantCall, "assistant", `I'm calling ${d.contractor_name} now, and I'll text you the time as soon as it's booked.`);
 await send({ type: "status-update", status: "ended", call: tenantCall });

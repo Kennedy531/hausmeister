@@ -2,7 +2,22 @@
 // realtime as a "something changed" trigger and refetches here (no phone numbers leave the server).
 import { connection } from "next/server";
 import { db, must } from "@/lib/db";
-import { formatSlot, formatTime } from "@/lib/time";
+import { formatSlot, formatTime, formatWindow, startsInWindow } from "@/lib/time";
+
+const TICKET_COLUMNS = `id, unit_id, visit_unit_id, issue_type, urgency, status, summary, photo_path, photo_assessment, photo_safety_advice,
+  pattern_flag, pattern_note, contractor_id, scheduled_at, call_started_at, booked_at, created_at, seed,
+  tenant_call_id, dispatcher_call_id, dispatch_attempts, escalation_reason,
+  contractor:contractors(name, company, trade, rating, language),
+  tenant:tenants(name),
+  events:ticket_events(id, kind, message, created_at)`;
+
+function ticketQuery(sb: ReturnType<typeof db>, withAvailability: boolean) {
+  return sb
+    .from("tickets")
+    .select(withAvailability ? `${TICKET_COLUMNS}, available_from, available_until` : TICKET_COLUMNS)
+    .order("id", { ascending: false })
+    .limit(30);
+}
 
 export async function GET() {
   await connection();
@@ -10,18 +25,8 @@ export async function GET() {
   const [buildings, units, tickets, calls, rules, slots] = await Promise.all([
     sb.from("buildings").select("id, name, address, city, floors, build_year, boiler_type, last_boiler_service").limit(1),
     sb.from("units").select("id, label, floor, stack").order("floor"),
-    sb
-      .from("tickets")
-      .select(
-        `id, unit_id, visit_unit_id, issue_type, urgency, status, summary, photo_path, photo_assessment, photo_safety_advice,
-         pattern_flag, pattern_note, contractor_id, scheduled_at, call_started_at, booked_at, created_at, seed,
-         tenant_call_id, dispatcher_call_id, dispatch_attempts, escalation_reason,
-         contractor:contractors(name, company, trade, rating, language),
-         tenant:tenants(name),
-         events:ticket_events(id, kind, message, created_at)`,
-      )
-      .order("id", { ascending: false })
-      .limit(30),
+    // Falls back to the older columns until supabase/migrations/002 (tenant availability) has been run.
+    ticketQuery(sb, true).then((r) => (r.error ? ticketQuery(sb, false) : r)),
     // Falls back to the pre-translation columns until supabase/migrations/001 has been run.
     sb.from("call_events").select("id, call_id, agent, role, text, lang, translation, ticket_id, created_at").order("id", { ascending: false }).limit(200)
       .then((r) => (r.error ? sb.from("call_events").select("id, call_id, agent, role, text, ticket_id, created_at").order("id", { ascending: false }).limit(200) : r)),
@@ -63,10 +68,14 @@ export async function GET() {
         tenant: undefined,
         contractor: undefined,
         scheduled_label: t.scheduled_at ? formatTime(t.scheduled_at) : null,
+        tenant_window:
+          t.available_from || t.available_until ? formatWindow((t.available_from as string) ?? null, (t.available_until as string) ?? null) : null,
         photo_url,
         events: [...(t.events ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id),
+        // The slots the dispatcher may offer: this contractor's free ones that fit when the tenant is home.
         offered_slots: slotRows
           .filter((s) => s.contractor_id === t.contractor_id && (!s.booked || t.scheduled_at === s.starts_at))
+          .filter((s) => startsInWindow(s.starts_at, t.available_from as string | null, t.available_until as string | null))
           .slice(0, 2)
           .map((s) => ({ id: s.id, label: formatSlot(s.starts_at, s.ends_at), booked: s.booked })),
       };

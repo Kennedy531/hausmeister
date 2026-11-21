@@ -16,6 +16,8 @@ export interface DispatcherBrief {
   urgency: Urgency;
   issueSummary: string;
   patternNote: string; // empty when there is no pattern
+  /** When the tenant is home, e.g. "from 18:00". The slots are already filtered to it. */
+  tenantWindow?: string;
   slots: { id: number; startsAt: string; endsAt: string }[];
 }
 
@@ -37,6 +39,7 @@ export function dispatcherVariables(brief: DispatcherBrief): Record<string, stri
     urgency: brief.urgency,
     issue_summary: brief.issueSummary,
     pattern_note: brief.patternNote || "none",
+    tenant_window: brief.tenantWindow || "any time today",
     // Times are spoken in the venue's time zone, never UTC.
     slots_text: brief.slots
       .map((s) => `slot_id ${s.id}: ${formatSlot(s.startsAt, s.endsAt, lang)}`)
