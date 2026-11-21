@@ -10,7 +10,7 @@ About 3 minutes plus Q&A. The demo is the pitch: one real phone call, start to f
 | Tenant (calls in) | whoever holds the **…9862** phone | Calls **+31 85 083 5699**. Recognised as "Kennedy, flat 3B" |
 | Plumber "Jan" | Emmanuel, holding the **…7117** phone | Gets the dispatcher's call |
 
-Every contractor rings **…7117** right now, including the fallback plumber. If someone else plays the tenant or the plumber, update the numbers in Supabase first (`docs/STATUS.md` explains how).
+There is one plumber (Jan) and no fallback: every contractor rings **…7117**. If someone else plays the tenant or the plumber, update the numbers in Supabase first (`docs/STATUS.md` explains how).
 
 ## 10 minutes before
 
@@ -43,7 +43,7 @@ Every contractor rings **…7117** right now, including the fallback plumber. If
 
 ## What not to do
 
-- **Don't hang up on the dispatcher without picking a time.** The app then calls the next plumber, which is the same phone again. If it happens: press **Reset demo** (needs the normal admin view, so press **S** first).
+- **Don't hang up on the dispatcher without picking a time.** There's no second plumber, so the ticket goes to "Escalated". If it happens: press **S**, then **Dispatch manually** to ring Jan again, or **Reset demo** and start over.
 - **Don't talk over the agent.** Short answers, phone close, speaker on.
 - **Don't pause long** before answering; the agent may fill the silence.
 
@@ -52,7 +52,7 @@ Every contractor rings **…7117** right now, including the fallback plumber. If
 | Problem | Do this |
 |---|---|
 | The agent creates the ticket but doesn't call the plumber | Press **S** to leave stage mode, then **Dispatch manually** (top right) |
-| The plumber's phone doesn't ring | Say "the contractor's line is busy"; it automatically tries the next plumber. Otherwise switch to the backup video |
+| The plumber's phone doesn't ring | Press **S**, then **Dispatch manually** to ring Jan again. Otherwise switch to the backup video |
 | The call drops or Wi-Fi fails | Phone hotspot for the laptop; switch to the backup video within 5 seconds |
 | The agent mishears | Repeat once, slowly. Don't argue with it |
 | The dashboard looks stuck | Refresh the page (keep the `?key=`); the data is safe in the database |
