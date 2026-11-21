@@ -17,6 +17,7 @@ This is the one place that says what is set up where, what has been proven to wo
 | Fallback to the second plumber | ✅ Works (Jan's call ended early, so Mila was called and booked) |
 | Agents follow the speaker's language | ✅ Works: the dispatcher opened in Dutch and switched to English when asked |
 | Dashboard data and live transcript | ✅ Works (not yet checked on the big screen) |
+| **Tenant confirmation email** | ✅ Live: sent through Gmail (kennedyf531@gmail.com, app password) to `CONFIRMATION_EMAIL_TO` when a slot is booked. Test email delivered Saturday ~09:50 |
 | Confirmation text, neighbour text (SMS) | ⏸️ Not sent: the Twilio trial (account made Saturday, number +1 478 834 9568) refused even the sign-up number (error 21608) and won't verify other Dutch numbers. Twilio isn't configured on Vercel, so texts are logged on the ticket and shown on the dashboard instead |
 | Photo upload with vision | 🗑️ Removed completely on Saturday morning (page, API, tools, dashboard card and step). The live database still has the unused `photo_*` columns and `photos` bucket, which are harmless |
 | Emergency path (gas, fire) | ❔ Not tested live |
