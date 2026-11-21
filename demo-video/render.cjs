@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { chromium } = require('playwright');
 const path = require('path');
 const names = ['01-title','02-problem','03-live','04-context','05-connector','06-close'];

@@ -18,7 +18,7 @@ There is one plumber (Jan) and no fallback: every contractor rings **…7117**. 
 2. Press **Reset demo** (bottom left). It clears old calls and gives fresh slots today.
 3. Switch to stage mode: press **S** (or add `&stage=1`). Go full screen. Check it says **"Waiting for a call"** and the timer reads **00:00.0**.
 4. Both phones: charged, ringer on, **speaker on**, Do Not Disturb off. Test the hall's Wi-Fi or use a hotspot.
-5. Have the backup video open in another tab or window, and Gmail (kennedyf531@gmail.com) open on a phone or second screen to show the confirmation email.
+5. Have the backup video open in another tab or window, and the demo Gmail inbox open on a phone or second screen to show the confirmation email.
 6. One quick test call if there's time, then **Reset demo** again.
 
 ## The script
@@ -35,7 +35,7 @@ There is one plumber (Jan) and no fallback: every contractor rings **…7117**. 
 | | **5. When are you home?** | Agent: "When are you home today?" Tenant: "From twelve." | — |
 | | **6. Contractor called** | Agent: "I'm calling Jan now…", then hangs up. **…7117 rings.** | Badge "Calling contractor", **Dispatch** card |
 | | **7. The plumber** | Dispatcher opens in Dutch. Emmanuel either answers in Dutch (point at the **live English subtitles**) or says "English please" (it switches). It briefs him and offers the times that fit. Emmanuel: "The twelve o'clock works." | Contractor tab in the transcript |
-| ~2:10 | **8. Booked** | Dispatcher confirms and hangs up. Seconds later the **confirmation email** arrives in kennedyf531@gmail.com: plumber, time, flat, ticket number and a safety tip. | **Timer stops**, "Booked", **Tenant notified: Confirmation emailed**, the **"What this call did"** card. Optional: show the email on a phone or a second screen |
+| ~2:10 | **8. Booked** | Dispatcher confirms and hangs up. Seconds later the **confirmation email** arrives in the demo Gmail inbox: plumber, time, flat, ticket number and a safety tip. | **Timer stops**, "Booked", **Tenant notified: Confirmation emailed**, the **"What this call did"** card. Optional: show the email on a phone or a second screen |
 | 2:10–2:40 | **Why it works** | Presenter: "Reltix says AI isn't the differentiator, context is. Hausmeister is what that context sounds like on the phone." | Pattern banner again |
 | 2:40–3:00 | **Close** | Presenter: "[Time on the timer] from call to plumber booked. Any hour, any language. Tenants don't want a ticket number. They want the plumber booked." | Impact card |
 

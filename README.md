@@ -1,6 +1,6 @@
 # Hausmeister
 
-An AI voice caretaker. A tenant calls; before the call ends, the agent has triaged the problem, checked the building's history, booked a contractor by phone and texted the tenant a confirmed slot.
+An AI voice caretaker. A tenant calls; before the call ends, the agent has triaged the problem, checked the building's history, booked a contractor by phone and emailed the tenant the confirmed time.
 
 > "Tenants don't want a ticket number. They want the plumber booked."
 
@@ -15,16 +15,16 @@ npm run dev
 ```
 
 1. **Database.** In the Supabase SQL editor run `supabase/schema.sql`, then `supabase/seed.sql`, then your own `supabase/phones.local.sql` (copy it from `phones.example.sql`, add the real numbers exactly as they show up as caller ID; it is git-ignored).
-2. **Try the whole loop without phones.** With `npm run dev` running: `node scripts/simulate-demo.mjs` plays the six demo moments against the webhook (add `--no-answer` to see the fallback to the second plumber, `--fast` to skip pauses). Watch it on `http://localhost:3000/?key=<DASHBOARD_ADMIN_KEY>`.
+2. **Try the whole loop without phones.** With `npm run dev` running: `node scripts/simulate-demo.mjs` plays the six demo moments against the webhook (add `--no-answer` to see a missed call escalate, `--fast` to skip pauses). Watch it on `http://localhost:3000/?key=<DASHBOARD_ADMIN_KEY>`.
 3. **Phones.** Deploy (or `ngrok http 3000`) and set `PUBLIC_BASE_URL`, then `node scripts/sync-agents.mjs`. It creates or updates both Vapi assistants from `agents/` and points the phone number at `/api/vapi`, so inbound calls are matched to the tenant by caller ID before the agent says hello. Put the printed assistant ids in `.env.local` and on Vercel.
-4. **Before every rehearsal:** press *Reset demo* on the dashboard (or `select reset_demo();`). It deletes call-created tickets and transcripts, re-dates the seed history and gives every contractor two fresh slots today. Phones are kept.
+4. **Before every rehearsal:** press *Reset demo* on the dashboard (or `select reset_demo();`). It deletes call-created tickets and transcripts, re-dates the seed history and gives every contractor three fresh slots today. Phones are kept.
 
-Without Twilio or Vapi keys, SMS and the outbound call are logged instead of sent, so the rest of the loop still runs.
+Without Gmail or Vapi keys, the email and the outbound call are logged instead of sent, so the rest of the loop still runs.
 
 ## Demo safety nets
 
 - **Dispatch guard:** `dispatch_contractor` refuses (with a reason the agent says) unless the ticket is open, not an emergency, and a contractor has a free slot. Nobody's phone rings by accident.
-- **No answer:** if a dispatcher call ends without a booking, the next contractor by rating is called; after two calls the on-call manager is texted and the ticket escalates.
+- **No answer:** if a dispatcher call ends without a booking, the next contractor of that trade by rating is called; with nobody left the ticket escalates to the on-call manager.
 - **Emergencies:** gas, fire, sparks or water on electrics get the safety script, an escalated ticket and an SMS to `ONCALL_MANAGER_PHONE`; never a normal dispatch.
 - **Backup button:** on the dashboard (`?key=`), *Backup: dispatch now* runs the same guarded dispatch if the agent stalls.
 - **`confirm_slot`** only books a free slot of the contractor that was called, atomically.
