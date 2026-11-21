@@ -51,5 +51,5 @@ Without Twilio or Vapi keys, SMS and the outbound call are logged instead of sen
 
 These Vapi details couldn't be verified without an account; the webhook already accepts the likely variants, but confirm them in the first test call:
 - the greeting uses the caller's name (variables from `assistant-request` reach `firstMessage`);
-- outbound calls reach Dutch/German numbers (Vapi's free numbers may be US-only; import a Twilio number if not);
+- outbound calls reach Dutch numbers (Vapi's free numbers may be US-only; import a Twilio number if not);
 - `sync-agents.mjs` is accepted as-is (`endCall` tool type, Deepgram `nova-3` with `multi` language).

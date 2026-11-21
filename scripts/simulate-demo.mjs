@@ -11,7 +11,7 @@ import { env } from "./env.mjs";
 const base = env.WEBHOOK_BASE_URL ?? "http://localhost:3000";
 const fast = process.argv.includes("--fast");
 const noAnswer = process.argv.includes("--no-answer");
-const tenantPhone = env.DEMO_TENANT_PHONE ?? "+490000000003";
+const tenantPhone = env.DEMO_TENANT_PHONE ?? "+310000000003";
 const tenantCall = { id: `sim-tenant-${Date.now()}`, startedAt: new Date().toISOString(), customer: { number: tenantPhone } };
 const wait = (s) => (fast ? Promise.resolve() : new Promise((r) => setTimeout(r, s * 1000)));
 
