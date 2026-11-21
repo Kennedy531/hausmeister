@@ -7,12 +7,12 @@ Cards: the PNGs in this folder (1920×1080). Edit text in `cards.html`, re-rende
 | Time | Picture | Voiceover |
 |---|---|---|
 | 0:00–0:06 | `01-title.png` | "This is Hausmeister, the AI caretaker that books the plumber before you hang up." |
-| 0:06–0:20 | `02-problem.png` | "It's 11 pm and water is coming through your ceiling. Today you get a ticket number, and someone has to triage it, check the building, find a contractor and call everyone back. That takes days." |
+| 0:06–0:20 | `02-problem.png` | "It's 11 pm and water is coming through your ceiling. Today you get a ticket number, and someone has to triage it, check the building, find a contractor and call everyone back. Reltix counts twelve calls and emails before a broken heater gets fixed." |
 | 0:20–0:24 | `03-live.png` | "Here's one real call. Real phones, real time, no cuts." |
 | 0:24–1:50 | **Uncut live run**: dashboard in stage mode (`/?stage=1`), phone mirrored or filmed on the side, call audio on | Mostly silent: let the call speak. Short captions only at the key beats (see below). |
 | 1:50–2:05 | `04-context.png` | "The difference is context. Hausmeister read the building's history, saw three leaks in the same stack, sent the plumber to the flat above first, and asked that neighbour for access." |
 | 2:05–2:20 | `05-connector.png` | "And the plumber is just partner one. Every partner (internet, energy) plugs in the same way: one new file." |
-| 2:20–2:30 | `06-close.png` | "Tenants don't want a ticket number. They want the plumber booked." |
+| 2:20–2:30 | `06-close.png` | "Twelve calls and emails, down to one. Tenants don't want a ticket number. They want the plumber booked." |
 
 ## Captions during the live run (one line each, bottom of screen)
 1. Caller recognised by phone number
