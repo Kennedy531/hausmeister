@@ -4,7 +4,7 @@ An AI voice caretaker. A tenant calls; before the call ends, the agent has triag
 
 > "Tenants don't want a ticket number. They want the plumber booked."
 
-> **Current status, accounts and the morning checklist:** [`docs/STATUS.md`](docs/STATUS.md)
+> **Current status, accounts and the morning checklist:** [`docs/STATUS.md`](docs/STATUS.md) · **Live demo script:** [`docs/DEMO.md`](docs/DEMO.md)
 
 ## Setup
 
