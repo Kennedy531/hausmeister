@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0a0a0b; --fg:#ededef; --t2:#a1a1aa; --t3:#6e6e78; --line:#222226; --card:#111113; --green:#3ecf8e; --amber:#f5a524; --blue:#52a8ff; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; background: var(--bg); color: var(--fg); font-family: Geist, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .card { display: none; width: 1920px; height: 1080px; padding: 140px 160px; position: relative; flex-direction: column; justify-content: center; }
+  .card.on { display: flex; }
+  .logo { width: 64px; height: 64px; border-radius: 16px; background: var(--fg); color: var(--bg); display: grid; place-items: center; }
+  .brand { display: flex; align-items: center; gap: 22px; font-size: 34px; font-weight: 600; letter-spacing: -0.01em; }
+  .foot { position: absolute; left: 160px; right: 160px; bottom: 90px; display: flex; justify-content: space-between; color: var(--t3); font-size: 24px; }
+  .kicker { font-family: "Geist Mono", monospace; font-size: 26px; color: var(--t3); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 36px; }
+  h1 { font-size: 104px; line-height: 1.02; font-weight: 600; letter-spacing: -0.04em; }
+  h2 { font-size: 92px; line-height: 1.06; font-weight: 600; letter-spacing: -0.035em; max-width: 1500px; }
+  p.sub { font-size: 40px; line-height: 1.35; color: var(--t2); margin-top: 40px; max-width: 1400px; }
+  .muted { color: var(--t3); }
+  .green { color: var(--green); } .amber { color: var(--amber); } .blue { color: var(--blue); }
+  .pills { display: flex; gap: 18px; margin-top: 56px; flex-wrap: wrap; }
+  .pill { font-size: 28px; padding: 14px 26px; border-radius: 999px; border: 1px solid #2e2e34; color: var(--t2); display: inline-flex; gap: 12px; align-items: center; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--t3); display: inline-block; }
+  .live .dot { background: #ff4d4f; box-shadow: 0 0 0 6px rgba(255,77,79,.18); }
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; margin-top: 70px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px 26px 30px; min-height: 210px; }
+  .step .n { font-family: "Geist Mono", monospace; color: var(--t3); font-size: 22px; }
+  .step .t { font-size: 30px; font-weight: 600; margin: 14px 0 10px; }
+  .step .d { font-size: 22px; color: var(--t2); line-height: 1.4; }
+  .partners { display: flex; gap: 18px; margin-top: 34px; }
+  .partner { flex: 1; border: 1px solid var(--line); border-radius: 16px; padding: 22px 26px; font-size: 26px; display: flex; justify-content: space-between; align-items: center; }
+  .partner.live { border-color: rgba(62,207,142,.45); background: rgba(62,207,142,.06); }
+  .tag { font-size: 20px; padding: 6px 12px; border-radius: 8px; border: 1px solid #2e2e34; color: var(--t3); }
+  .partner.live .tag { color: var(--green); border-color: rgba(62,207,142,.45); }
+  .quote { font-size: 104px; line-height: 1.06; font-weight: 600; letter-spacing: -0.04em; max-width: 1560px; }
+  .team { margin-top: 64px; font-size: 32px; color: var(--t2); }
+  .bar { width: 120px; height: 6px; border-radius: 6px; background: var(--amber); margin-bottom: 44px; }
+</style>
+</head>
+<body>
+
+<!-- 1. Opening -->
+<section class="card" data-name="01-title">
+  <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="36" height="36"><path d="M12 21a6 6 0 0 0 6-6c0-1.7-.9-3.3-2.6-4.7S12.4 6.9 12 4.6c-.4 2.3-1.7 4.3-3.4 5.7S6 13.3 6 15a6 6 0 0 0 6 6Z" fill="currentColor"/></svg></span>Hausmeister</div>
+  <h1 style="margin-top:70px">The AI caretaker<br>that books the plumber<br><span class="muted">before you hang up.</span></h1>
+  <div class="foot"><span>Built for the Reltix track</span><span>Kennedy · Tadiwa · Emmanuel</span></div>
+</section>
+
+<!-- 2. The problem -->
+<section class="card" data-name="02-problem">
+  <div class="kicker">The problem</div>
+  <h2>11 pm. Water is coming<br>through the ceiling.</h2>
+  <p class="sub">Today a tenant gets a ticket number. Someone has to triage it, check the building's history, find a contractor and call everyone back. That takes days.</p>
+</section>
+
+<!-- 3. Before the live run -->
+<section class="card" data-name="03-live">
+  <div class="kicker">The demo</div>
+  <h2>One real call.<br><span class="muted">Real phones, real time, no cuts.</span></h2>
+  <div class="pills">
+    <span class="pill live"><span class="dot"></span>Tenant calls the Hausmeister line</span>
+    <span class="pill"><span class="dot"></span>AI dispatcher calls the plumber</span>
+    <span class="pill"><span class="dot"></span>Everyone gets a text</span>
+  </div>
+</section>
+
+<!-- 4. Context -->
+<section class="card" data-name="04-context">
+  <div class="bar"></div>
+  <div class="kicker">Why it works</div>
+  <h2>Context is the product.</h2>
+  <p class="sub">Hausmeister doesn't just log the leak. It reads the building's history, sees <span class="amber">three leaks in the same stack</span>, sends the plumber to the flat above first, and asks that neighbour for access.</p>
+</section>
+
+<!-- 5. Connector spec -->
+<section class="card" data-name="05-connector" style="justify-content:flex-start;padding-top:120px">
+  <div class="kicker">How the next partner plugs in</div>
+  <h2 style="font-size:76px">The plumber is partner one.<br><span class="muted">Partner two is one new file.</span></h2>
+  <div class="flow">
+    <div class="step"><div class="n">01</div><div class="t">Trigger</div><div class="d">Something happens for a tenant</div></div>
+    <div class="step"><div class="n">02</div><div class="t">Context</div><div class="d">Unit, history and tenant from centrix</div></div>
+    <div class="step"><div class="n">03</div><div class="t">Contact</div><div class="d">Call or API to the partner</div></div>
+    <div class="step"><div class="n">04</div><div class="t">Confirm</div><div class="d">Booking or order comes back</div></div>
+    <div class="step"><div class="n">05</div><div class="t">Inform</div><div class="d">Tenant gets a text</div></div>
+  </div>
+  <div class="partners">
+    <div class="partner live">Contractor: repair booked <span class="tag">Live</span></div>
+    <div class="partner">Internet: line live on move-in <span class="tag">Spec</span></div>
+    <div class="partner">Energy: cheaper contract <span class="tag">Spec</span></div>
+  </div>
+</section>
+
+<!-- 6. Close -->
+<section class="card" data-name="06-close">
+  <div class="quote">Tenants don't want<br>a ticket number.<br><span class="green">They want the plumber booked.</span></div>
+  <div class="team">Hausmeister · Kennedy, Tadiwa, Emmanuel</div>
+</section>
+
+<script>
+  const n = Number(new URLSearchParams(location.search).get("n") || 1);
+  document.querySelectorAll(".card")[n - 1]?.classList.add("on");
+</script>
+</body>
+</html>
