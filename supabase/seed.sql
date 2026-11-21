@@ -27,9 +27,7 @@ insert into contractors (name, company, trade, phone, rating, hourly_rate_eur, l
   ('Jan',    'Schulte Plumbing',       'plumber',     '+310000000100', 4.8, 65, 'nl'), -- speaks Dutch: the dispatcher calls in Dutch -- Emmanuel's phone
   ('Ingrid', 'Brandt Electric',        'electrician', '+310000000101', 4.6, 70, 'en'),
   ('Kai',    'Maas Locksmiths',        'locksmith',   '+310000000102', 4.4, 55, 'en'),
-  ('Olu',    'Okafor Home Services',   'handyman',    '+310000000103', 4.7, 45, 'en'),
-  -- Second plumber: called if Jan doesn't pick up (use the spare phone for this).
-  ('Mila',   'Maas Pipe Services',     'plumber',     '+310000000104', 4.5, 60, 'en');
+  ('Olu',    'Okafor Home Services',   'handyman',    '+310000000103', 4.7, 45, 'en');
 
 
 -- History. The two open leaks in stack B are what make the context moment work.

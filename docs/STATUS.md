@@ -14,7 +14,7 @@ This is the one place that says what is set up where, what has been proven to wo
 | Pattern moment (plumber goes to 4B first) | ✅ Works. Since Saturday ~10:10 the tenant agent **doesn't say it out loud**; it shows on the dashboard and routes the plumber |
 | Outbound call to the contractor | ✅ Works (after the Telnyx fix, see [Fixed tonight](#fixed-tonight)) |
 | Contractor accepts a slot, ticket booked | ✅ Works: ticket 1013 booked about 1.5 minutes after the call started |
-| Fallback to the second plumber | ✅ Works (Jan's call ended early, so Mila was called and booked) |
+| Fallback to the second plumber | Removed: Jan is the only plumber, a missed call escalates |
 | Agents follow the speaker's language | ✅ Works: the dispatcher opened in Dutch and switched to English when asked |
 | Dashboard data and live transcript | ✅ Works (not yet checked on the big screen) |
 | **Tenant confirmation email** | ✅ Live: sent through Gmail (kennedyf531@gmail.com, app password) to `CONFIRMATION_EMAIL_TO` when a slot is booked. Test email delivered Saturday ~09:50 |
@@ -60,8 +60,8 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 - **The demo building is in Maastricht** (Building B, Maasboulevard 7, mock address). All tenants are English-speaking, placeholder numbers are +31, and contractor companies have English and Dutch names (Schulte Plumbing, Brandt Electric, Maas Locksmiths, Okafor Home Services, Maas Pipe Services). This is in both the live database and `supabase/seed.sql`.
 - **Demo data changed by hand** (not in the seed files):
   - Two tenants named **Kennedy** in flat **3B**, with Kennedy's two mobiles (…9862 and …7117), English. The first replaced the seeded "Tadiwa".
-  - **All five contractors** (Jan, Mila, Ingrid, Kai, Olu) currently ring **Kennedy's …7117**. **Call in as the tenant from …9862** (the only number Twilio might ever text).
-  - Jan and Mila (the plumbers) are set to Dutch.
+  - **All four contractors** (Jan, Ingrid, Kai, Olu) ring the stage dispatcher phone **…7117**. Mila (the fallback plumber) was deleted. **Call in as the tenant from …9862** (the only number Twilio might ever text).
+  - Jan (the only plumber) is set to Dutch.
 - Before each rehearsal: **Reset demo** on the dashboard, or `select reset_demo();`. It removes call-created tickets, re-dates the history and creates fresh free slots for today. Tenants and contractors are kept.
 
 ### Vapi: Kennedy's org
@@ -133,7 +133,7 @@ The carrier forwards the number to the SIP Direct entry, which still had the Fys
 1. **One full test call of the final flow** (nothing since the availability question, the photo removal and the email): Reset demo, call from **…9862**, report a leak in 3B, say when you're home, accept the time on **…7117**, then check the timer stops, "Confirmation emailed" shows, and the email arrives.
 2. **Demo cast and numbers.** Right now the tenant is Kennedy (…9862 and …7117) and every contractor rings …7117. If others play the roles, update Supabase:
    - put the right name and number on the 3B tenant
-   - Jan → Emmanuel's phone, Mila → a spare phone (so the fallback is visible), and the other contractors back to something sensible
+   - Jan → the stage phone; the other contractors back to something sensible
    - decide Jan's language: Dutch with English subtitles on the dashboard, or English
    - set `ONCALL_MANAGER_PHONE` (local and Vercel).
 3. **Keep `main` as the one branch.** It's what's live. Any last change: push to `main` (auto-deploys), and run `sync-agents.mjs` if a prompt changed.

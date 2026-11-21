@@ -4,7 +4,7 @@
 //   node scripts/simulate-demo.mjs              (against http://localhost:3000)
 //   WEBHOOK_BASE_URL=https://x.vercel.app node scripts/simulate-demo.mjs
 //   node scripts/simulate-demo.mjs --fast       (no pauses)
-//   node scripts/simulate-demo.mjs --no-answer  (Jan misses the call -> Mila is called)
+//   node scripts/simulate-demo.mjs --no-answer  (Jan misses the call -> the ticket is escalated)
 import { env } from "./env.mjs";
 
 const base = env.WEBHOOK_BASE_URL ?? "http://localhost:3000";
