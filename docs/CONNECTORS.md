@@ -1,152 +1,109 @@
-# Partner connectors
+# Partner connector spec
 
-Hausmeister turns something that happens to a tenant into a confirmed result with an outside partner, without a property manager in the loop. The contractor is partner one and runs live in the demo. Internet and energy are the next two partners; they are specified here but not built.
+How Hausmeister uses the products of the MAIN AI Hackathon partners, and how it plugs into Reltix's platform for the Reltix track.
 
-| Partner | Outcome for the tenant | Status |
+| Partner | Product we used | What it does in Hausmeister |
 |---|---|---|
-| Contractor | Repair booked before the call ends | **Live** |
-| Internet provider | Line working on move-in day | Spec |
-| Energy supplier | Cheaper contract, switched with the tenant's consent | Spec |
+| **OpenAI** | `gpt-4.1-mini` | The brain of both voice agents (triage, tool calls, booking) and the live English subtitles on the dashboard |
+| **ElevenLabs** | Turbo v2.5 voices | Every word the two agents say: Jessica for the caretaker, Eric for the dispatcher, in English, Dutch or German |
+| **Reltix** (track) | centrix data model | The context the agent works from: tenant, flat, building, history, contractors. Mocked in Supabase for the demo |
 
-## The five steps every partner follows
+One call, end to end: the tenant phones the caretaker line → **OpenAI** triages and creates the ticket while **ElevenLabs** speaks → the agent phones the plumber → the dispatcher (OpenAI + ElevenLabs again) books a time → the tenant gets an email, and the dashboard shows every step with **OpenAI** subtitles.
 
-| Step | What happens | Contractor (live) |
+---
+
+## OpenAI
+
+### 1. The brain of both voice agents
+
+Both agents run on `gpt-4.1-mini` (temperature 0.3), chosen for fast, reliable tool calling: on a phone call, latency matters more than raw intelligence. The model is configured in [`agents/config.mjs`](../agents/config.mjs) and pushed to Vapi with `node scripts/sync-agents.mjs`; the prompts are in [`agents/tenant/prompt.md`](../agents/tenant/prompt.md) and [`agents/dispatcher/prompt.md`](../agents/dispatcher/prompt.md).
+
+**Caretaker agent (tenant calls in).** The model:
+- greets the caller by name (caller ID is matched before it says hello),
+- picks the issue type and urgency from at most two triage questions,
+- runs the safety script for gas, fire, smoke or sparks ("leave the flat and call 112"), and never books a normal repair for an emergency,
+- turns "When are you home today?" answers like "after four" into 24-hour times (`available_from: "16:00"`),
+- replies in whatever language the caller speaks.
+
+**Dispatcher agent (calls the contractor).** The model:
+- briefs the contractor in three sentences from a brief the backend fills in (flat, problem, urgency, when the tenant is home),
+- offers only the free slots it was given, which are already filtered to when the tenant is home,
+- recognises the contractor accepting a time and books it,
+- switches language the moment the contractor does (it opens in Dutch for Jan and follows him into English).
+
+**Tools the model calls.** Each one is a POST to our webhook (`/api/vapi`), which runs it against the database and returns a short result the agent speaks from. The shapes are fixed in [`src/lib/contract.ts`](../src/lib/contract.ts).
+
+| Agent | Tool | What it does |
 |---|---|---|
-| 1. Trigger | Something happens for a tenant | The tenant phones the caretaker line; the agent triages and calls `create_ticket` |
-| 2. Context | Load the tenant, unit, building and history | `lookup_tenant` (caller ID), building history and pattern rule in `src/lib/tools/data.ts` |
-| 3. Contact | Pick the right partner and reach them | `dispatchTicket` picks the best-rated contractor of the right trade with a free slot while the tenant is home, then an AI dispatcher phones them (`src/lib/vapi.ts`, `agents/dispatcher/prompt.md`) |
-| 4. Confirm | The partner commits to a time or an order | The contractor picks a slot out loud; `confirm_slot` books it atomically (`book_slot` in `supabase/schema.sql`) |
-| 5. Inform | The tenant gets the result | Booking email with who, when and a safety tip (`src/lib/email.ts`); the dashboard updates live |
+| Caretaker | `lookup_tenant` | Finds the caller by phone number (only when caller ID didn't match) |
+| Caretaker | `create_ticket` | Saves the repair with issue type, urgency and a one-line summary; applies the building pattern rule |
+| Caretaker | `dispatch_contractor` | Picks the best-rated contractor of the right trade with a free slot while the tenant is home, and starts the outbound call |
+| Dispatcher | `confirm_slot` | Books the accepted slot atomically and emails the tenant |
+| Both | `endCall` | Hangs up when the job is done |
 
-If step 3 or 4 fails (no answer, voicemail, the partner declines), the connector tries the next partner, and after `MAX_DISPATCH_ATTEMPTS` the ticket is escalated to a human (`onDispatcherCallEnded` in `src/lib/tools/dispatch.ts`).
+The model never invents times, names or prices; every fact it says comes back from a tool.
 
-## Connector interface
+### 2. Live English subtitles
 
-Proposed. Today the contractor connector lives in the files named above. Extracting it into this interface is the first task when adding partner two; after that, a new partner is one file in `src/lib/connectors/`, plus an agent prompt if it talks to the partner by phone.
+The plumber call is in Dutch, so the audience can't follow it. Every final transcript line goes through `gpt-4.1-mini` in JSON mode ([`src/lib/openai.ts`](../src/lib/openai.ts)), which detects the language and returns an English translation if the line isn't English. The dashboard shows the original line with the English subtitle under it, live.
 
-```ts
-// src/lib/connectors/types.ts (proposed)
-import type { Language } from "@/lib/contract";
+### Cost
 
-/** What every connector gets from the property platform (centrix in production, Supabase mock data today). */
-export interface TenantContext {
-  tenant: { id: number; name: string; phone: string; email: string | null; language: Language };
-  unit: { id: number; label: string; floor: number; stack: string };
-  building: { id: number; name: string; address: string; city: string };
-}
+Measured from the call logs: about **$0.07 per tenant call** and **$0.05–0.09 per dispatcher call**, all-in (model, voice, speech recognition and phone line). The dashboard shows the real cost of each call.
 
-export type Trigger =
-  | { kind: "tenant_call"; ticketId: number }                 // contractor
-  | { kind: "move_in"; leaseId: number; moveInDate: string }  // internet, energy
-  | { kind: "contract_ending"; unitId: number; endsOn: string }; // energy
+---
 
-export interface Partner {
-  id: number;
-  name: string;
-  channel: "voice" | "api";
-  phone?: string;   // voice partners
-  rating?: number;
-}
+## ElevenLabs
 
-export interface Offer {
-  id: string;
-  label: string;     // what the agent says or the email shows, e.g. "today 16:00 to 18:00"
-  startsAt?: string; // ISO
-  priceEur?: number;
-}
+Every word the agents say is generated by ElevenLabs, through Vapi's ElevenLabs integration ([`agents/config.mjs`](../agents/config.mjs), `voiceFor`).
 
-export type Confirmation =
-  | { ok: true; reference: string; summary: string } // booking id, order number, contract number
-  | { ok: false; reason: string };
-
-export interface PartnerConnector<Job> {
-  id: "contractor" | "internet" | "energy";
-  /** Which triggers start this connector. */
-  handles: Trigger["kind"][];
-  /** Turn the trigger plus context into a job, or refuse with a reason. */
-  buildJob(trigger: Trigger, ctx: TenantContext): Promise<Job | { refused: string }>;
-  /** Partners for this job, best first. */
-  rankPartners(job: Job): Promise<Partner[]>;
-  /** Reach the partner (phone call or API request) and get offers back. */
-  contact(partner: Partner, job: Job): Promise<{ offers: Offer[] }>;
-  /** Commit to one offer. Must be idempotent: a second call returns the same confirmation. */
-  confirm(job: Job, offer: Offer): Promise<Confirmation>;
-  /** Tell the tenant. Never throws; returns whether it was delivered. */
-  inform(ctx: TenantContext, job: Job, confirmation: Confirmation): Promise<{ sent: boolean }>;
-  /** Does the tenant have to say yes before confirm()? True for anything the tenant pays for. */
-  needsTenantConsent: boolean;
-}
-```
-
-Every step writes a row to `ticket_events` (`dispatch`, `booked`, `email`, `escalated`, ...). The dashboard's activity list and timer read those rows, so a new partner shows up on the dashboard without dashboard code changes.
-
-## Context: what comes from the platform
-
-Each tool maps to data Reltix already holds in centrix. In the demo the same data is mock rows in Supabase.
-
-| Hausmeister uses | Demo source (Supabase) | Production source (centrix) |
+| | Caretaker | Dispatcher |
 |---|---|---|
-| Tenant by caller ID: name, flat, language | `tenants`, `units` | Tenant records |
+| Voice | **Jessica**: warm, calm, for a worried tenant | **Eric**: brisk and friendly, like a good property manager |
+| Model | `eleven_turbo_v2_5` | `eleven_turbo_v2_5` |
+| Settings | stability 0.4, similarity boost 0.8, speaker boost on | same |
+
+Why these choices:
+- **Two distinct voices.** On stage the audience hears two different characters, so it's clear when the caretaker hands over to the dispatcher.
+- **Turbo v2.5.** Our first version used a Flash model and sounded robotic on the phone. Turbo v2.5 sounds far more natural and is still fast enough for live turn-taking.
+- **Multilingual.** The same voice speaks English, Dutch and German, so the dispatcher can open in Dutch and switch to English mid-call without changing voice.
+- **Lower stability (0.4).** More expressive and less monotone; speaker boost keeps it close to the original voice.
+
+---
+
+## Reltix (track): plugging into centrix
+
+Reltix's point is that AI isn't the differentiator, context is. Hausmeister only works because it knows who is calling, where they live, what has happened in the building, and who can fix it. Every one of those facts is data Reltix already holds in centrix. For the demo we mocked it in Supabase with the same shape:
+
+| Hausmeister uses | Demo source (Supabase) | centrix equivalent |
+|---|---|---|
+| Caller by phone number: name, flat, language | `tenants`, `units` | Tenant records |
 | Building and its specs | `buildings` | Building specs |
-| Repeat issues in the same stack | `tickets` (30-day pattern rule) | Maintenance history |
+| Repeat issues in the same stack (30-day pattern rule) | `tickets` | Maintenance history |
 | Contractors: trade, rating, rate, language | `contractors` | Contractor history |
-| Contractor free times | `contractor_slots` | Contractor calendars or the dispatcher call itself |
+| Contractor free times | `contractor_slots` | Contractor calendars |
 | Who pays for which repair | `lease_rules` (mock) | Lease terms |
-| Ticket and its log | `tickets`, `ticket_events` | Tickets / tenant interactions |
+| Every step of the job | `tickets`, `ticket_events` | Tickets and tenant interactions |
 
-## Partner 1: Contractor (live)
+The contractor is the partner we plugged in, and it follows five steps any partner (internet, energy) could reuse:
 
-- **Trigger:** inbound tenant call. The tenant agent identifies the caller, asks at most two triage questions, creates the ticket and asks "When are you home today?".
-- **Partner choice:** trade from the issue (`TRADE_FOR_ISSUE` in `src/lib/contract.ts`), then highest rating with a free slot inside the tenant's window. If nobody is free then, the agent offers the earliest time instead.
-- **Contact:** outbound phone call by the dispatcher agent. It gets a brief (`DispatcherBrief`): contractor name, language, building, address, flat, urgency, problem summary, when the tenant is home, and only the slots that fit. The tenant's phone number is not shared with the contractor.
-- **Language:** opens in the contractor's stored language and switches to whatever they speak; the dashboard shows live English subtitles.
-- **Confirm:** `confirm_slot` with a slot id from the brief. Refuses slots outside the tenant's window; the database function books atomically, so a slot can't be booked twice.
-- **Inform:** email to the tenant: contractor, company, time, flat, ticket number and a safety tip.
-- **Guards:** no dispatch for emergencies (gas, fire, sparks get the 112 script and an escalated ticket); no dispatch unless the ticket is open; one ticket per call.
-- **Measured cost:** about $0.07 per tenant call and $0.05 to $0.09 per dispatcher call.
+1. **Trigger:** the tenant phones the caretaker line.
+2. **Context:** tenant, flat, building and history are loaded from the platform.
+3. **Contact:** the right contractor is picked and phoned by the AI dispatcher.
+4. **Confirm:** the contractor accepts a time and it's booked; a slot can't be booked twice.
+5. **Inform:** the tenant gets a confirmation email, and every step is logged on the ticket.
 
-## Partner 2: Internet provider (spec)
+If the contractor doesn't book, the ticket escalates to a human. Emergencies never reach a contractor automatically.
 
-Goal: the tenant's internet works on the day they move in, without them phoning a provider.
+---
 
-- **Trigger:** a signed lease with a move-in date (`move_in`), 3 weeks ahead. Also a tenant call about no internet, which reuses the contractor flow's triage.
-- **Context needed:** move-in date, flat, the connection id for the flat (new field on `units`, e.g. fibre access point id), which providers serve the building.
-- **Partners:** providers available at the address, ranked by price for the building's standard plan and by past activation reliability.
-- **Contact:** provider order API where one exists; otherwise the dispatcher agent calls the provider's business line with an order brief (address, connection id, wanted activation date).
-- **Offers:** activation dates and, if a technician is needed, appointment windows.
-- **Consent:** yes. The tenant pays for the contract, so the tenant confirms provider and plan first (email link or a short call) before the order is placed.
-- **Confirm:** order number and activation date.
-- **Inform:** email with provider, plan, activation date and when the router arrives.
-- **Failure:** no activation before move-in → order the earliest date and tell the tenant; provider refuses → next provider; after two failures → property manager.
+## The rest of the stack (not MAIN partners)
 
-## Partner 3: Energy supplier (spec)
-
-Goal: every tenant is on a fair energy contract, switched with their consent.
-
-- **Trigger:** move-in, and 6 weeks before a tenant's current contract ends (`contract_ending`).
-- **Context needed:** meter ids for the flat (electricity and gas, new fields on `units`), the building's typical yearly use for a flat that size, current contract end date if the tenant shares it.
-- **Partners:** suppliers or a switching service with an API, ranked by expected yearly cost for that flat.
-- **Contact:** API quote request with meter ids and estimated use.
-- **Offers:** two or three tariffs with yearly cost, contract length and green share.
-- **Consent:** required. The agent never switches on its own. It presents the options (call or email) and switches only after an explicit yes from the tenant, which is logged on the ticket.
-- **Confirm:** switch request accepted, with the supplier's contract number and start date.
-- **Inform:** email with supplier, tariff, yearly cost and start date.
-- **Failure:** quote or switch rejected → next supplier, then the property manager.
-
-## Rules for every connector
-
-1. **Guard first.** A connector refuses with a reason the agent can say (wrong state, emergency, nothing available) instead of throwing.
-2. **Never in an emergency.** Safety script, escalation and a human, always.
-3. **Consent for anything the tenant pays for.** Repairs the landlord pays for can be booked straight away; contracts in the tenant's name need an explicit yes.
-4. **Share the minimum.** A partner gets what the job needs: address and problem for a contractor, meter ids for an energy supplier. Never the tenant's phone number unless the tenant agrees.
-5. **Idempotent confirm.** Retries and double tool calls must not create two bookings or two orders.
-6. **Retry, then a human.** Try the next partner; after the limit, escalate to the on-call manager with the reason.
-7. **Log every step** in `ticket_events`, so the dashboard and the audit trail stay complete.
-
-## Adding a partner
-
-1. Write `src/lib/connectors/<partner>.ts` implementing `PartnerConnector`.
-2. Register it for its triggers in `src/lib/connectors/index.ts`.
-3. Voice partners only: add `agents/<partner>/prompt.md` and its confirm tool in `agents/config.mjs`, then run `node scripts/sync-agents.mjs`.
-4. Add the partner table and demo rows to `supabase/schema.sql` and `supabase/seed.sql`.
-5. Test the loop without phones with `node scripts/simulate-demo.mjs`, then with one real call.
+| Tool | Role |
+|---|---|
+| Vapi | Runs the phone calls and the two agents, and sends tool calls to our webhook |
+| Deepgram `nova-3` (multilingual, via Vapi) | Speech to text |
+| Telnyx | The Dutch +31 phone number, connected to Vapi over SIP |
+| Supabase | Postgres database (EU), the mock centrix data and the event log |
+| Next.js on Vercel | The webhook, the tools and the live dashboard |
+| Gmail | Sends the booking confirmation email to the tenant |
