@@ -17,8 +17,8 @@ This is the one place that says what is set up where, what has been proven to wo
 | Fallback to the second plumber | ✅ Works (Jan's call ended early, so Mila was called and booked) |
 | Agents follow the speaker's language | ✅ Works: the dispatcher opened in Dutch and switched to English when asked |
 | Dashboard data and live transcript | ✅ Works (not yet checked on the big screen) |
-| Confirmation text, neighbour text, photo link (SMS) | ⏸️ No Twilio yet: texts are logged on the ticket instead of sent |
-| Photo upload with vision | ❔ Not tested live (needs SMS for the link) |
+| Confirmation text, neighbour text (SMS) | ⏸️ Not sent: the Twilio trial (account made Saturday, number +1 478 834 9568) refused even the sign-up number (error 21608) and won't verify other Dutch numbers. Twilio isn't configured on Vercel, so texts are logged on the ticket and shown on the dashboard instead |
+| Photo upload with vision | ⛔ Switched off for the demo: the link goes out by SMS, and the Twilio trial can't text Dutch numbers. The tools still exist; `agents/config.mjs` says how to turn them back on |
 | Emergency path (gas, fire) | ❔ Not tested live |
 | German tenant call | Not needed: the demo is English and Maastricht-based now (German still works if a caller speaks it) |
 | Tenant availability ("when are you home?") | ✅ Live since Saturday morning: deployed from `main`, migration 002 run, agents synced. Not yet tried on a real call |
@@ -57,7 +57,7 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 - **The demo building is in Maastricht** (Building B, Maasboulevard 7, mock address). All tenants are English-speaking, placeholder numbers are +31, and contractor companies have English and Dutch names (Schulte Plumbing, Brandt Electric, Maas Locksmiths, Okafor Home Services, Maas Pipe Services). This is in both the live database and `supabase/seed.sql`.
 - **Demo data changed by hand** (not in the seed files):
   - Two tenants named **Kennedy** in flat **3B**, with Kennedy's two mobiles (…9862 and …7117), English. The first replaced the seeded "Tadiwa".
-  - **All five contractors** (Jan, Mila, Ingrid, Kai, Olu) currently ring **Kennedy's …9862**, so any trade reaches a real phone during testing.
+  - **All five contractors** (Jan, Mila, Ingrid, Kai, Olu) currently ring **Kennedy's …7117**. **Call in as the tenant from …9862** (the only number Twilio might ever text).
   - Jan and Mila (the plumbers) are set to Dutch.
 - Before each rehearsal: **Reset demo** on the dashboard, or `select reset_demo();`. It removes call-created tickets, re-dates the history and creates fresh free slots for today. Tenants and contractors are kept.
 
@@ -78,8 +78,11 @@ None of these ids are secret. Keys are in `.env.local` and in Vercel only.
 - Outbound voice profile **"Default"** (Global, rate deck), attached to the Kyrix connection. Allowed destinations: North America (as before) plus **Netherlands +31** and **Germany +49**.
 - Debugging → SIP Call Flow Tool shows every call with its SIP reason. It's the quickest way to see why a call failed.
 
+### Twilio (SMS): tried, not used for the demo
+- A trial account exists, and its account id, token and number are in Kennedy's `.env.local`. They are **not** in Vercel, so the live app logs texts instead of sending them.
+- To make texts work later: upgrade the account (removes the verified-numbers limit), ideally get a Dutch or alphanumeric sender, add the three `TWILIO_*` settings in Vercel and redeploy.
+
 ### Not set up yet
-- **Twilio** (SMS): account SID, auth token and sending number (`scripts/set-env.sh TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER`, then the same three in Vercel and a redeploy).
 - `ONCALL_MANAGER_PHONE`, `DEMO_NEIGHBOUR_PHONE`, `NEXT_PUBLIC_TYPICAL_RESPONSE`.
 
 ## Tenant availability (now live)
@@ -119,7 +122,7 @@ The carrier forwards the number to the SIP Direct entry, which still had the Fys
 ## What's left before the demo
 
 ### Must do
-1. **Twilio for texts.** Demo moment 6 (the tenant's phone buzzing with the confirmation), the photo link and the neighbour text all need it. Trial accounts only text verified numbers, so verify the demo phones.
+1. ~~Twilio for texts~~: dropped for the demo (see the Twilio section). On stage, point at "Tenant notified" on the dashboard and say it goes out by SMS in production.
 2. **Demo cast and numbers.** Decide who calls as the tenant (the plan says Tadiwa), then in Supabase:
    - put the right name and number on the 3B tenant
    - Jan → Emmanuel's phone, Mila → a spare phone (so the fallback is visible), and the other contractors back to something sensible
@@ -129,7 +132,7 @@ The carrier forwards the number to the SIP Direct entry, which still had the Fys
 4. **Rehearse 5 or more times in the hall** (Reset before each), test in the noise, record the backup video around 08:30, code freeze at 09:00.
 
 ### Test once
-5. Photo moment (after Twilio): link, upload, vision assessment, safety advice.
+5. ~~Photo moment~~: switched off for the demo.
 6. Emergency path: "I smell gas" should give the safety script and an escalated ticket, with no dispatch.
 7. Switching language mid-call (English ↔ Dutch).
 8. The dashboard on the big screen with the admin key: the timer stops at booking, the pattern highlight shows.
