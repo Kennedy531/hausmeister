@@ -18,7 +18,7 @@ This is the one place that says what is set up where, what has been proven to wo
 | Agents follow the speaker's language | ✅ Works: the dispatcher opened in Dutch and switched to English when asked |
 | Dashboard data and live transcript | ✅ Works (not yet checked on the big screen) |
 | Confirmation text, neighbour text (SMS) | ⏸️ Not sent: the Twilio trial (account made Saturday, number +1 478 834 9568) refused even the sign-up number (error 21608) and won't verify other Dutch numbers. Twilio isn't configured on Vercel, so texts are logged on the ticket and shown on the dashboard instead |
-| Photo upload with vision | ⛔ Switched off for the demo: the link goes out by SMS, and the Twilio trial can't text Dutch numbers. The tools still exist; `agents/config.mjs` says how to turn them back on |
+| Photo upload with vision | 🗑️ Removed completely on Saturday morning (page, API, tools, dashboard card and step). The live database still has the unused `photo_*` columns and `photos` bucket, which are harmless |
 | Emergency path (gas, fire) | ❔ Not tested live |
 | German tenant call | Not needed: the demo is English and Maastricht-based now (German still works if a caller speaks it) |
 | Tenant availability ("when are you home?") | ✅ Live since Saturday morning: deployed from `main`, migration 002 run, agents synced. Not yet tried on a real call |
@@ -132,7 +132,7 @@ The carrier forwards the number to the SIP Direct entry, which still had the Fys
 4. **Rehearse 5 or more times in the hall** (Reset before each), test in the noise, record the backup video around 08:30, code freeze at 09:00.
 
 ### Test once
-5. ~~Photo moment~~: switched off for the demo.
+5. ~~Photo moment~~: removed.
 6. Emergency path: "I smell gas" should give the safety script and an escalated ticket, with no dispatch.
 7. Switching language mid-call (English ↔ Dutch).
 8. The dashboard on the big screen with the admin key: the timer stops at booking, the pattern highlight shows.

@@ -111,42 +111,6 @@ export const tools: ToolHandlers = {
     return { ticket_id: row.id, pattern: c.pattern, visit_first: c.visit_first ?? unit.label };
   },
 
-  async send_photo_link(input, ctx) {
-    const t = await getTicket(asId(input.ticket_id));
-    if (!t) return { sent: false, message: "No ticket with that number." };
-    const to = t.tenant?.phone ?? ctx.callerPhone;
-    if (!to) return { sent: false, message: "No phone number to text." };
-    const base = (process.env.PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
-    const lang = t.tenant?.language ?? "en";
-    const link = `${base}/photo/${t.id}`;
-    const sms = await sendSms(
-      to,
-      lang === "de"
-        ? `Hausmeister: Bitte schicken Sie ein Foto vom Schaden (Ticket #${t.id}): ${link}`
-        : lang === "nl"
-          ? `Hausmeister: stuur een foto van de schade (ticket #${t.id}): ${link}`
-          : `Hausmeister: please send a photo of the damage (ticket #${t.id}): ${link}`,
-    );
-    await ticketEvent(t.id, "photo_link", sms.sent ? "Photo link texted to the tenant" : `Photo link not sent (${sms.error})`);
-    return sms.sent
-      ? { sent: true, message: "Photo link sent by SMS. Ask the tenant to tap it and take a photo, then check_photo." }
-      : { sent: false, message: "The text could not be sent. Skip the photo and carry on." };
-  },
-
-  async check_photo(input) {
-    const t = await getTicket(asId(input.ticket_id));
-    if (!t) return { uploaded: false, message: "No ticket with that number." };
-    if (!t.photo_assessment) {
-      return { uploaded: false, message: "Not uploaded yet. Ask the tenant if they've sent it, wait a moment, then check again once." };
-    }
-    return {
-      uploaded: true,
-      assessment: t.photo_assessment,
-      urgency: t.urgency,
-      safety_advice: t.photo_safety_advice ?? "",
-    };
-  },
-
   async dispatch_contractor(input) {
     const hasWindow = Boolean(input.available_from || input.available_until);
     const r = await dispatchTicket(asId(input.ticket_id), {
